@@ -177,6 +177,10 @@ fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f
                 thread::sleep(Duration::from_millis(delay));
                 let ack = receiver.build_ack(Instant::now());
                 let _ = sender.on_ack(ack, Instant::now());
+                // feed goodput to BWE
+                let fb = receiver.build_feedback(Instant::now());
+                let _ = sender.on_feedback(fb, Instant::now());
+                eprintln!("BWE after update: {} bps (loss {:.2})", sender.estimator().estimate().pace_bps, sender.estimator().loss_ratio());
             }
         }
         Transport::Ws => {

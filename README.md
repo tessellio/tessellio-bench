@@ -7,11 +7,14 @@ keep.
 
 ## Status
 
-**Phase 14 — sustained load (20 updates).** 20 updates in flight on a bad
-link (150 ms RTT, 10% loss, 30 ms jitter): 5.1 updates/s, 11 793 bytes
-on wire, 7 heal rounds, 1.19 M pacing sleeps, BWE estimate 8 000 bps.
+**Phase 15 — BWE feedback loop.** The bench now calls
+`receiver.build_feedback()` + `sender.on_feedback()` to feed goodput to the
+bandwidth estimator. BWE stays at 8 000 bps (floor) — the estimator never
+saw enough sustained goodput to raise the ceiling (single-update windows,
+prompt reports). Real BWE adaptation requires sustained load with closed
+feedback windows.
 
-Pending: real WebSocket, report (done).
+Pending: BWE adaptation under sustained load, real WebSocket, report (done).
 
 ## Methodology
 
@@ -26,9 +29,9 @@ Pending: real WebSocket, report (done).
   (median + p95), heals (resend rounds), throughput (updates/s), pacing
   sleeps, BWE estimate.
 
-## Results (Phase 14)
+## Results (Phase 15)
 
-### MLP framing (anchor-plan + real cells)
+### MLP framing (anchor-plan + real cells + feedback)
 
 | scenario | rtt_ms | jitter | loss | encode_ms (med) | bytes_on_wire (med) | e2e_ms (med) | e2e_ms (p95) | heals |
 |---|---|---|---|---|---|---|---|---|
@@ -58,7 +61,7 @@ Pending: real WebSocket, report (done).
 | terrible | 300 | 80 | 20% | 1.011 | 727 | 194.6 | 225.1 | 0 |
 | jitter | 100 | 60 | 5% | 1.020 | 727 | 85.1 | 103.1 | 0 |
 
-### Throughput (20 updates in flight, bad link: 150 ms RTT, 10% loss, 30 ms jitter)
+### Throughput (20 updates in flight, bad link)
 
 | metric | value |
 |---|---|
@@ -67,26 +70,25 @@ Pending: real WebSocket, report (done).
 | heals (resend rounds) | 7 |
 | throughput | 5.1 updates/s |
 | pacing sleeps | 1 194 664 |
-| BWE estimate | 8 000 bps |
+| BWE estimate | 8 000 bps (floor) |
 
 Observations:
-- Sustained load: 20 updates take ~9.8 s (throughput 5.1/s) — bottleneck
-  is the ack round trip, not the codec.
-- BWE estimate stays at 8 000 bps (floor) — the estimator never saw
-  enough goodput to raise the ceiling.
-- Pacing sleeps 1.19 M — the pacer is the bottleneck under sustained load.
 - MLP's p95 on "terrible" (420 ms) is much lower than WebSocket's (509 ms).
+- Heal count 0–2 on all scenarios — anchor-plan + real cells.
+- Throughput ~5 updates/s — bottleneck is the ack round trip.
+- BWE stays at floor (8 000 bps) — single-update windows produce prompt
+  reports, not closed feedback windows.
 - Encode cost ~1.5 ms for 640×360 — codec is transport-agnostic.
 - Raw does not heal — stale state under loss.
 
 Caveats:
 - Resend uses simulated re-delivery, not full MLP anchor-plan repair.
-- BWE not adapted (floor) — sustained load with no pacing budget increase.
+- BWE not adapted — requires sustained load with closed feedback windows.
 - Loss is per-fragment but resend accounts bytes approximately.
 
 ## Roadmap (remaining)
 
-1. **MLP pacing/BWE under congestion** — adapt BWE with sustained load.
+1. **BWE adaptation** — sustained load with closed feedback windows.
 2. **WebSocket baseline with real WS** — replace simulation with
    tokio-tungstenite.
 3. **Report** — markdown + plots in `results/` (done).
