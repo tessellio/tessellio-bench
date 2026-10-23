@@ -7,10 +7,12 @@ keep.
 
 ## Status
 
-**Phase 8 — throughput measured.** 5 updates in flight on a bad link:
-34.7 updates/s, 1 139 bytes on wire, 1 heal round, 144 ms total.
+**Phase 9 — pacing exercised.** The bench now respects the pacer: poll_fragment
+returns None on refusal, the bench sleeps poll_timeout and retries. Pacing
+sleeps: 0 on the tested scenario (pacer not the bottleneck for 5 updates).
 
-Pending: MLP anchor-plan repair, pacing/BWE, real WebSocket, report.
+Pending: MLP anchor-plan repair, pacing/BWE under congestion, real
+WebSocket, report.
 
 ## Methodology
 
@@ -22,19 +24,20 @@ Pending: MLP anchor-plan repair, pacing/BWE, real WebSocket, report.
   repair on loss; WebSocket-like (whole frame, resend on loss); Raw (no
   loss handling).
 - Metrics: encode time (median), bytes on wire (median), end-to-end latency
-  (median + p95), heals (resend rounds), throughput (updates/s).
+  (median + p95), heals (resend rounds), throughput (updates/s), pacing
+  sleeps.
 
-## Results (Phase 8)
+## Results (Phase 9)
 
 ### MLP framing (selective fragment repair)
 
 | scenario | rtt_ms | jitter | loss | encode_ms (med) | bytes_on_wire (med) | e2e_ms (med) | e2e_ms (p95) | heals |
 |---|---|---|---|---|---|---|---|---|
-| ideal | 10 | 0 | 0% | 1.554 | 813 | 10.2 | 10.4 | 0 |
-| good | 50 | 5 | 1% | 1.401 | 813 | 55.2 | 60.2 | 0 |
-| bad | 150 | 30 | 10% | 1.009 | 813 | 174.2 | 198.2 | 2 |
-| terrible | 300 | 80 | 20% | 1.256 | 813 | 391.2 | 440.2 | 7 |
-| jitter | 100 | 60 | 5% | 1.100 | 813 | 166.7 | 206.2 | 1 |
+| ideal | 10 | 0 | 0% | 1.142 | 813 | 10.2 | 10.2 | 0 |
+| good | 50 | 5 | 1% | 0.987 | 813 | 56.2 | 60.2 | 0 |
+| bad | 150 | 30 | 10% | 1.041 | 813 | 181.7 | 198.2 | 3 |
+| terrible | 300 | 80 | 20% | 1.041 | 813 | 368.6 | 415.2 | 18 |
+| jitter | 100 | 60 | 5% | 1.000 | 813 | 166.7 | 206.2 | 0 |
 
 ### WebSocket-like (resend on loss)
 
@@ -60,30 +63,32 @@ Pending: MLP anchor-plan repair, pacing/BWE, real WebSocket, report.
 
 | metric | value |
 |---|---|
-| total bytes on wire | 1 139 |
-| total time | 144.2 ms |
-| heals (resend rounds) | 1 |
-| throughput | 34.7 updates/s |
+| total bytes on wire | 1 019 |
+| total time | 123.1 ms |
+| heals (resend rounds) | 0 |
+| throughput | 40.6 updates/s |
+| pacing sleeps | 0 |
 
 Observations:
-- MLP's p95 on "terrible" (440 ms) is much lower than WebSocket's (859 ms)
+- MLP's p95 on "terrible" (415 ms) is much lower than WebSocket's (859 ms)
   — selective repair keeps latency bounded.
-- Throughput ~35 updates/s on a bad link with 5 updates in flight —
-  plausible for a remote-desktop scenario.
+- Throughput ~41 updates/s on a bad link with 5 updates in flight.
 - Encode cost ~1 ms for 640×360 — codec scales with surface size.
+- Pacer did not throttle (0 sleeps) — single burst, plenty of tokens.
 - Raw does not heal — stale state under loss.
 
 Caveats:
 - Resend is simulated (re-deliver lost fragments), not MLP's anchor-plan
   repair.
-- No pacing/BWE yet — the pacer is not exercised.
+- No pacing/BWE under congestion yet — pacer not exercised.
 - Loss is per-fragment but resend accounts bytes approximately.
 
 ## Roadmap
 
 1. **MLP anchor-plan repair** — replace simulated resend with MLP's own
    repair (PlanStarted / plan_next_update).
-2. **MLP pacing/BWE** — exercise the pacer with multiple updates.
+2. **MLP pacing/BWE under congestion** — exercise the pacer with sustained
+   load.
 3. **WebSocket baseline with real WS** — replace simulation with
    tokio-tungstenite.
 4. **Report** — markdown + plots in `results/`.

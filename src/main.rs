@@ -196,13 +196,30 @@ fn run_throughput(link: Link, rng: &mut impl Rng) -> (u64, f64, u32) {
         let _ = sender.enqueue_update(UpdateRequest::delta(vec![0u8; tess_bytes], vec![0, 1]), Instant::now());
     }
 
-    // Poll all fragments.
+    // Poll all fragments, respecting the pacer (sleep on refusal).
     let mut all_frags: Vec<Vec<u8>> = Vec::new();
-    while let Some(f) = sender.poll_fragment(Instant::now()) {
-        all_frags.push(f.bytes);
-        if all_frags.len() > 100000 { break; }
+    let mut pacing_sleeps = 0u32;
+    let poll_start = Instant::now();
+    while sender.queued_objects() > 0 || sender.in_flight() > 0 {
+        match sender.poll_fragment(Instant::now()) {
+            Some(f) => {
+                all_frags.push(f.bytes);
+                if all_frags.len() > 100000 { break; }
+            }
+            None => {
+                if let Some(wait) = sender.poll_timeout(Instant::now()) {
+                    thread::sleep(wait.min(Duration::from_millis(5)));
+                    pacing_sleeps += 1;
+                } else {
+                    thread::sleep(Duration::from_millis(1));
+                }
+                if poll_start.elapsed().as_secs() > 5 { break; }
+            }
+        }
     }
     total_bytes += sender.stats().bytes_sent;
+    // record pacing sleeps in heals? no, separate. We'll just note via stderr.
+    eprintln!("pacing sleeps: {}", pacing_sleeps);
 
     // Deliver with loss.
     let mut pending: Vec<Vec<u8>> = Vec::new();
@@ -264,6 +281,7 @@ fn print_throughput() {
     println!("| total time (ms) | {:.1} |", ms);
     println!("| heals (resend rounds) | {} |", heals);
     println!("| throughput (updates/s) | {:.1} |", 5.0 / (ms / 1000.0));
+    println!("| (see stderr for pacing sleeps) | |");
 }
 
 fn median(v: &[f64]) -> f64 {
