@@ -7,12 +7,11 @@ keep.
 
 ## Status
 
-**Phase 13 — real cell accounting.** Tessellio now exposes
-`changed_cell_indices` in `EncodedUpdate`; the bench feeds real cell indices
-into MLP's sender accounting instead of placeholders. Anchor-plan repair
-uses actual cells.
+**Phase 14 — sustained load (20 updates).** 20 updates in flight on a bad
+link (150 ms RTT, 10% loss, 30 ms jitter): 5.1 updates/s, 11 793 bytes
+on wire, 7 heal rounds, 1.19 M pacing sleeps, BWE estimate 8 000 bps.
 
-Pending: pacing/BWE under congestion, real WebSocket, report (done).
+Pending: real WebSocket, report (done).
 
 ## Methodology
 
@@ -24,9 +23,10 @@ Pending: pacing/BWE under congestion, real WebSocket, report (done).
   (with selective fallback); WebSocket-like (whole frame, resend on loss);
   Raw (no loss handling).
 - Metrics: encode time (median), bytes on wire (median), end-to-end latency
-  (median + p95), heals (resend rounds), throughput (updates/s).
+  (median + p95), heals (resend rounds), throughput (updates/s), pacing
+  sleeps, BWE estimate.
 
-## Results (Phase 13)
+## Results (Phase 14)
 
 ### MLP framing (anchor-plan + real cells)
 
@@ -58,30 +58,35 @@ Pending: pacing/BWE under congestion, real WebSocket, report (done).
 | terrible | 300 | 80 | 20% | 1.011 | 727 | 194.6 | 225.1 | 0 |
 | jitter | 100 | 60 | 5% | 1.020 | 727 | 85.1 | 103.1 | 0 |
 
-### Throughput (5 updates in flight, bad link)
+### Throughput (20 updates in flight, bad link: 150 ms RTT, 10% loss, 30 ms jitter)
 
 | metric | value |
 |---|---|
-| total bytes on wire | 1 637 |
-| total time | 1 001.5 ms |
-| heals (resend rounds) | 0 |
-| throughput | 5.0 updates/s |
-| pacing sleeps | 188 333 |
+| total bytes on wire | 11 793 |
+| total time | 9 768.4 ms |
+| heals (resend rounds) | 7 |
+| throughput | 5.1 updates/s |
+| pacing sleeps | 1 194 664 |
+| BWE estimate | 8 000 bps |
 
 Observations:
-- With real cell indices, MLP heals dropped to 0–2 on all scenarios —
-  anchor-plan repair now has accurate cell data.
+- Sustained load: 20 updates take ~9.8 s (throughput 5.1/s) — bottleneck
+  is the ack round trip, not the codec.
+- BWE estimate stays at 8 000 bps (floor) — the estimator never saw
+  enough goodput to raise the ceiling.
+- Pacing sleeps 1.19 M — the pacer is the bottleneck under sustained load.
 - MLP's p95 on "terrible" (420 ms) is much lower than WebSocket's (509 ms).
 - Encode cost ~1.5 ms for 640×360 — codec is transport-agnostic.
 - Raw does not heal — stale state under loss.
 
 Caveats:
-- No pacing/BWE under congestion — pacer not exercised meaningfully.
+- Resend uses simulated re-delivery, not full MLP anchor-plan repair.
+- BWE not adapted (floor) — sustained load with no pacing budget increase.
 - Loss is per-fragment but resend accounts bytes approximately.
 
 ## Roadmap (remaining)
 
-1. **MLP pacing/BWE under congestion** — sustained load.
+1. **MLP pacing/BWE under congestion** — adapt BWE with sustained load.
 2. **WebSocket baseline with real WS** — replace simulation with
    tokio-tungstenite.
 3. **Report** — markdown + plots in `results/` (done).

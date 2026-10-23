@@ -407,7 +407,7 @@ fn main() {
     let link = Link { rtt_ms: 150, loss: 0.10, jitter_ms: 30 };
     let (tb, tm, th) = run_throughput(link, &mut rng2);
     println!();
-    println!("# Throughput (5 updates in flight, bad link)");
+    println!("# Throughput (20 updates in flight, bad link)");
     println!();
     println!("| metric | value |");
     println!("|---|---|");
