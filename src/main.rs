@@ -75,18 +75,42 @@ fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f
             let mut sender = MediaSenderMachine::new(MediaSenderConfig::new(Carrier::DataChannel, grid), grid, now);
             let mut receiver = MediaReceiverMachine::new(MediaReceiverConfig::for_carrier(Carrier::DataChannel), now);
 
-            for _attempt in 0..3 {
-                let _ = sender.enqueue_update(UpdateRequest::delta(vec![0u8; tess_bytes], vec![0, 1]), Instant::now());
-                let mut frags: Vec<Vec<u8>> = Vec::new();
-                while let Some(f) = sender.poll_fragment(Instant::now()) {
-                    frags.push(f.bytes);
-                    if frags.len() > 1000 {
-                        break;
+            // First attempt: enqueue + poll all fragments.
+            let _ = sender.enqueue_update(UpdateRequest::delta(vec![0u8; tess_bytes], vec![0, 1]), Instant::now());
+            let mut all_frags: Vec<Vec<u8>> = Vec::new();
+            while let Some(f) = sender.poll_fragment(Instant::now()) {
+                all_frags.push(f.bytes);
+                if all_frags.len() > 10000 { break; }
+            }
+            bytes_on_wire += sender.stats().bytes_sent;
+
+            // Deliver with loss.
+            let mut pending: Vec<Vec<u8>> = Vec::new();
+            let mut got_object = false;
+            for f in &all_frags {
+                if rng.r#gen::<f64>() < link.loss {
+                    pending.push(f.clone());
+                    continue;
+                }
+                let delay = link.rtt_ms / 2 + rng.r#gen::<u64>() % (link.jitter_ms + 1);
+                thread::sleep(Duration::from_millis(delay));
+                let evs = receiver.on_message(f, Instant::now());
+                for ev in evs {
+                    if let mlp_core::media::receiver::MediaReceiveEvent::Object(_) = ev {
+                        receiver.note_applied(1);
+                        got_object = true;
                     }
                 }
-                let mut got_object = false;
-                for f in &frags {
+            }
+
+            // Selective repair: resend only lost fragments, up to 3 rounds.
+            for _round in 0..3 {
+                if got_object || pending.is_empty() { break; }
+                heals += 1;
+                let mut still_pending: Vec<Vec<u8>> = Vec::new();
+                for f in &pending {
                     if rng.r#gen::<f64>() < link.loss {
+                        still_pending.push(f.clone());
                         continue;
                     }
                     let delay = link.rtt_ms / 2 + rng.r#gen::<u64>() % (link.jitter_ms + 1);
@@ -98,20 +122,17 @@ fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f
                             got_object = true;
                         }
                     }
+                    if !got_object {
+                        still_pending.push(f.clone());
+                    }
                 }
-                bytes_on_wire += sender.stats().bytes_sent;
-                if got_object {
-                    applied = true;
-                    break;
-                }
-                heals += 1;
-                // repair: re-enqueue as an MLP repair/anchor update
-                let mut req = UpdateRequest::delta(vec![0u8; tess_bytes], vec![0, 1]);
-                req.kind = mlp_core::media::scheduler::UpdateKind::Repair;
-                req.anchor = true;
-                let _ = sender.enqueue_update(req, Instant::now());
+                // account resend bytes (approx: lost fragments re-sent)
+                bytes_on_wire += (pending.len() as u64) * 120;
+                pending = still_pending;
             }
-            if applied {
+
+            if got_object {
+                applied = true;
                 let delay = link.rtt_ms / 2 + rng.r#gen::<u64>() % (link.jitter_ms + 1);
                 thread::sleep(Duration::from_millis(delay));
                 let ack = receiver.build_ack(Instant::now());
