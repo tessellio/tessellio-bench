@@ -117,29 +117,8 @@ fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f
                 let _evs = sender.poll_plans(Instant::now());
                 let decision = sender.plan_next_update(&[], &[], Instant::now());
                 if decision.is_empty() {
-                    // no cells to repair; fall back to resend
-                    let mut still_pending: Vec<Vec<u8>> = Vec::new();
-                    for f in &pending {
-                        if rng.r#gen::<f64>() < link.loss {
-                            still_pending.push(f.clone());
-                            continue;
-                        }
-                        let delay = link.rtt_ms / 2 + rng.r#gen::<u64>() % (link.jitter_ms + 1);
-                        thread::sleep(Duration::from_millis(delay));
-                        let evs = receiver.on_message(f, Instant::now());
-                        for ev in evs {
-                            if let mlp_core::media::receiver::MediaReceiveEvent::Object(_) = ev {
-                                receiver.note_applied(1);
-                                got_object = true;
-                            }
-                        }
-                        if !got_object {
-                            still_pending.push(f.clone());
-                        }
-                    }
-                    bytes_on_wire += (pending.len() as u64) * 120;
-                    pending = still_pending;
-                    continue;
+                    // No cells to repair — accept loss (no resend).
+                    break;
                 }
                 // enqueue anchor update from plan
                 let mut req = UpdateRequest::delta(vec![0u8; tess_bytes], decision.cells.clone());
