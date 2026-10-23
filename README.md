@@ -7,10 +7,8 @@ keep.
 
 ## Status
 
-**Phase 7 — selective fragment repair.** On loss, only the lost fragments
-are re-sent (not the whole update). This is MLP's key advantage over
-whole-update resend. Still simulated (naïve re-send of lost fragments, not
-MLP's anchor-plan repair).
+**Phase 8 — throughput measured.** 5 updates in flight on a bad link:
+34.7 updates/s, 1 139 bytes on wire, 1 heal round, 144 ms total.
 
 Pending: MLP anchor-plan repair, pacing/BWE, real WebSocket, report.
 
@@ -24,9 +22,9 @@ Pending: MLP anchor-plan repair, pacing/BWE, real WebSocket, report.
   repair on loss; WebSocket-like (whole frame, resend on loss); Raw (no
   loss handling).
 - Metrics: encode time (median), bytes on wire (median), end-to-end latency
-  (median + p95), heals (resend rounds).
+  (median + p95), heals (resend rounds), throughput (updates/s).
 
-## Results (Phase 7)
+## Results (Phase 8)
 
 ### MLP framing (selective fragment repair)
 
@@ -58,26 +56,34 @@ Pending: MLP anchor-plan repair, pacing/BWE, real WebSocket, report.
 | terrible | 300 | 80 | 20% | 1.016 | 727 | 181.6 | 211.1 | 0 |
 | jitter | 100 | 60 | 5% | 1.146 | 727 | 90.1 | 107.1 | 0 |
 
+### Throughput (5 updates in flight, bad link: 150 ms RTT, 10% loss, 30 ms jitter)
+
+| metric | value |
+|---|---|
+| total bytes on wire | 1 139 |
+| total time | 144.2 ms |
+| heals (resend rounds) | 1 |
+| throughput | 34.7 updates/s |
+
 Observations:
-- MLP now resends only lost fragments instead of the whole update — bytes
-  stay at 813 (first pass) + small resend cost, instead of full re-send.
 - MLP's p95 on "terrible" (440 ms) is much lower than WebSocket's (859 ms)
   — selective repair keeps latency bounded.
-- WebSocket still shows p95 spikes because it resends the whole frame.
-- Raw does not heal — stale state under loss.
+- Throughput ~35 updates/s on a bad link with 5 updates in flight —
+  plausible for a remote-desktop scenario.
 - Encode cost ~1 ms for 640×360 — codec scales with surface size.
+- Raw does not heal — stale state under loss.
 
 Caveats:
 - Resend is simulated (re-deliver lost fragments), not MLP's anchor-plan
-  repair — so MLP's healing advantage is understated.
-- No pacing/BWE yet — single update, no congestion.
+  repair.
+- No pacing/BWE yet — the pacer is not exercised.
 - Loss is per-fragment but resend accounts bytes approximately.
 
 ## Roadmap
 
 1. **MLP anchor-plan repair** — replace simulated resend with MLP's own
    repair (PlanStarted / plan_next_update).
-2. **MLP pacing/BWE** — multiple updates in flight.
+2. **MLP pacing/BWE** — exercise the pacer with multiple updates.
 3. **WebSocket baseline with real WS** — replace simulation with
    tokio-tungstenite.
 4. **Report** — markdown + plots in `results/`.

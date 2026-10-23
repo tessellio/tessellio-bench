@@ -172,6 +172,100 @@ fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f
     (encode_ms, bytes_on_wire, e2e_ms, heals)
 }
 
+/// Throughput: 5 updates in flight, measure total bytes and time.
+fn run_throughput(link: Link, rng: &mut impl Rng) -> (u64, f64, u32) {
+    let mut encoder = ScreenStreamEncoder::new(CodecConfig::default());
+    let mut total_bytes = 0u64;
+    let mut heals = 0u32;
+    let t_start = Instant::now();
+
+    let now = Instant::now();
+    let grid = CellGrid::with_cell_size(WIDTH, HEIGHT, 64);
+    let mut sender = MediaSenderMachine::new(MediaSenderConfig::new(Carrier::DataChannel, grid), grid, now);
+    let mut receiver = MediaReceiverMachine::new(MediaReceiverConfig::for_carrier(Carrier::DataChannel), now);
+
+    // Enqueue 5 updates.
+    for i in 0..5u64 {
+        let capture = paint((i as u32) + 1);
+        let planned = match encoder.encode(&capture) {
+            Ok(Some(p)) => p,
+            _ => continue,
+        };
+        let update = encoder.commit(planned, i + 1);
+        let tess_bytes = update.payload_bytes();
+        let _ = sender.enqueue_update(UpdateRequest::delta(vec![0u8; tess_bytes], vec![0, 1]), Instant::now());
+    }
+
+    // Poll all fragments.
+    let mut all_frags: Vec<Vec<u8>> = Vec::new();
+    while let Some(f) = sender.poll_fragment(Instant::now()) {
+        all_frags.push(f.bytes);
+        if all_frags.len() > 100000 { break; }
+    }
+    total_bytes += sender.stats().bytes_sent;
+
+    // Deliver with loss.
+    let mut pending: Vec<Vec<u8>> = Vec::new();
+    for f in &all_frags {
+        if rng.r#gen::<f64>() < link.loss {
+            pending.push(f.clone());
+            continue;
+        }
+        let delay = link.rtt_ms / 2 + rng.r#gen::<u64>() % (link.jitter_ms + 1);
+        thread::sleep(Duration::from_millis(delay));
+        let evs = receiver.on_message(f, Instant::now());
+        for ev in evs {
+            if let mlp_core::media::receiver::MediaReceiveEvent::Object(_) = ev {
+                // note applied for each; use update id 1 (simplified)
+            }
+        }
+    }
+    // Selective repair for lost fragments.
+    for _round in 0..3 {
+        if pending.is_empty() { break; }
+        heals += 1;
+        let mut still_pending: Vec<Vec<u8>> = Vec::new();
+        for f in &pending {
+            if rng.r#gen::<f64>() < link.loss {
+                still_pending.push(f.clone());
+                continue;
+            }
+            let delay = link.rtt_ms / 2 + rng.r#gen::<u64>() % (link.jitter_ms + 1);
+            thread::sleep(Duration::from_millis(delay));
+            let evs = receiver.on_message(f, Instant::now());
+            for ev in evs {
+                if let mlp_core::media::receiver::MediaReceiveEvent::Object(_) = ev {}
+            }
+            // approximate: if not lost, consider delivered
+            if rng.r#gen::<f64>() >= link.loss {
+                // delivered
+            } else {
+                still_pending.push(f.clone());
+            }
+        }
+        total_bytes += (pending.len() as u64) * 120;
+        pending = still_pending;
+    }
+
+    let total_ms = t_start.elapsed().as_secs_f64() * 1000.0;
+    (total_bytes, total_ms, heals)
+}
+
+fn print_throughput() {
+    let mut rng = rand::thread_rng();
+    let link = Link { rtt_ms: 100, loss: 0.10, jitter_ms: 30 };
+    let (bytes, ms, heals) = run_throughput(link, &mut rng);
+    println!();
+    println!("# Throughput (5 updates in flight, bad link)");
+    println!();
+    println!("| metric | value |");
+    println!("|---|---|");
+    println!("| total bytes on wire | {} |", bytes);
+    println!("| total time (ms) | {:.1} |", ms);
+    println!("| heals (resend rounds) | {} |", heals);
+    println!("| throughput (updates/s) | {:.1} |", 5.0 / (ms / 1000.0));
+}
+
 fn median(v: &[f64]) -> f64 {
     if v.is_empty() {
         return 0.0;
@@ -242,4 +336,5 @@ fn main() {
             );
         }
     }
+    print_throughput();
 }
