@@ -7,14 +7,12 @@ keep.
 
 ## Status
 
-**Phase 15 — BWE feedback loop.** The bench now calls
-`receiver.build_feedback()` + `sender.on_feedback()` to feed goodput to the
-bandwidth estimator. BWE stays at 8 000 bps (floor) — the estimator never
-saw enough sustained goodput to raise the ceiling (single-update windows,
-prompt reports). Real BWE adaptation requires sustained load with closed
-feedback windows.
+**Phase 16 — BWE adaptation.** The bench now waits for a closed feedback
+window (`receiver.report_interval()`) before calling `build_feedback` +
+`on_feedback`. BWE raises from floor (8 000) to 16 000 bps on some
+updates — the estimator saw enough goodput to lift the ceiling.
 
-Pending: BWE adaptation under sustained load, real WebSocket, report (done).
+Pending: real WebSocket, report (done).
 
 ## Methodology
 
@@ -29,7 +27,7 @@ Pending: BWE adaptation under sustained load, real WebSocket, report (done).
   (median + p95), heals (resend rounds), throughput (updates/s), pacing
   sleeps, BWE estimate.
 
-## Results (Phase 15)
+## Results (Phase 16)
 
 ### MLP framing (anchor-plan + real cells + feedback)
 
@@ -65,33 +63,31 @@ Pending: BWE adaptation under sustained load, real WebSocket, report (done).
 
 | metric | value |
 |---|---|
-| total bytes on wire | 11 793 |
-| total time | 9 768.4 ms |
+| total bytes on wire | 12 273 |
+| total time | 9 768.8 ms |
 | heals (resend rounds) | 7 |
 | throughput | 5.1 updates/s |
 | pacing sleeps | 1 194 664 |
-| BWE estimate | 8 000 bps (floor) |
+| BWE estimate | 8 000–16 000 bps (adaptive) |
 
 Observations:
+- BWE now adapts: 8 000 → 16 000 bps on some updates (closed feedback
+  windows provide goodput signal).
 - MLP's p95 on "terrible" (420 ms) is much lower than WebSocket's (509 ms).
 - Heal count 0–2 on all scenarios — anchor-plan + real cells.
 - Throughput ~5 updates/s — bottleneck is the ack round trip.
-- BWE stays at floor (8 000 bps) — single-update windows produce prompt
-  reports, not closed feedback windows.
 - Encode cost ~1.5 ms for 640×360 — codec is transport-agnostic.
 - Raw does not heal — stale state under loss.
 
 Caveats:
 - Resend uses simulated re-delivery, not full MLP anchor-plan repair.
-- BWE not adapted — requires sustained load with closed feedback windows.
 - Loss is per-fragment but resend accounts bytes approximately.
 
 ## Roadmap (remaining)
 
-1. **BWE adaptation** — sustained load with closed feedback windows.
-2. **WebSocket baseline with real WS** — replace simulation with
+1. **WebSocket baseline with real WS** — replace simulation with
    tokio-tungstenite.
-3. **Report** — markdown + plots in `results/` (done).
+2. **Report** — markdown + plots in `results/` (done).
 
 ## Building
 
