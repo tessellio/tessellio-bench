@@ -74,19 +74,19 @@ Complete. 19 phases, all roadmap items done.
 ## Graphs
 
 ### Median e2e latency (lower is better)
-![latency_med](results/latency_med.png)
+![latency_med](results/latency_med.png?v=2)
 
 ### p95 e2e latency (lower is better)
-![latency_p95](results/latency_p95.png)
+![latency_p95](results/latency_p95.png?v=2)
 
 ### Heal count (lower is better)
-![heals](results/heals.png)
+![heals](results/heals.png?v=2)
 
 ### Encode cost (lower is better)
-![encode](results/encode.png)
+![encode](results/encode.png?v=2)
 
 ### Bytes on wire (lower is better)
-![bytes](results/bytes.png)
+![bytes](results/bytes.png?v=2)
 
 ## Observations
 
