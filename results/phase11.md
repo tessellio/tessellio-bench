@@ -1,4 +1,4 @@
-# Phase 9 results — Tessellio over simulated transports
+# Phase 11 results — Tessellio over simulated transports
 
 Scene: 640×360 synthetic surface (~230 400 cells), ~7 fragments on DataChannel.
 20 iterations per scenario.
