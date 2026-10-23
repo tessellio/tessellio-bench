@@ -22,6 +22,7 @@ fn paint(phase: u32) -> CapturedFrame {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Transport {
     Mlp,
+    MlpFast,
     Ws,
     Raw,
 }
@@ -193,6 +194,52 @@ fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f
                 let _fb = receiver.build_feedback(Instant::now());
                 let _ = sender.on_feedback(_fb, Instant::now());
 
+            }
+        }
+        Transport::MlpFast => {
+            let now = Instant::now();
+            let grid = CellGrid::with_cell_size(WIDTH, HEIGHT, 64);
+            let mut cfg = MediaSenderConfig::new(Carrier::Ws, grid);
+            cfg.bwe.pace_floor_bps = 100_000_000;
+            let mut sender = MediaSenderMachine::new(cfg, grid, now);
+            sender.estimator_mut().on_evidence(now);
+            let mut receiver = MediaReceiverMachine::new(MediaReceiverConfig::for_carrier(Carrier::Ws), now);
+
+            let _ = sender.enqueue_update(UpdateRequest::delta(vec![0u8; tess_bytes], cells.clone()), Instant::now());
+            let mut all_frags: Vec<Vec<u8>> = Vec::new();
+            let poll_start = Instant::now();
+            while sender.queued_objects() > 0 || sender.in_flight() > 0 {
+                match sender.poll_fragment(Instant::now()) {
+                    Some(f) => {
+                        all_frags.push(f.bytes);
+                        if all_frags.len() > 10000 { break; }
+                    }
+                    None => {
+                        if let Some(w) = sender.poll_timeout(Instant::now()) {
+                            thread::sleep(w.max(Duration::from_millis(10)).min(Duration::from_millis(50)));
+                        } else {
+                            break;
+                        }
+                        if poll_start.elapsed().as_secs() > 5 { break; }
+                    }
+                }
+            }
+            bytes_on_wire += sender.stats().bytes_sent;
+
+            // Fire-and-forget: deliver without waiting for ack
+            for f in &all_frags {
+                if rng.r#gen::<f64>() < link.loss {
+                    continue;
+                }
+                let delay = link.rtt_ms / 2 + rng.r#gen::<u64>() % (link.jitter_ms + 1);
+                thread::sleep(Duration::from_millis(delay));
+                let evs = receiver.on_message(f, Instant::now());
+                for ev in evs {
+                    if let mlp_core::media::receiver::MediaReceiveEvent::Object(_) = ev {
+                        receiver.note_applied(1);
+                        applied = true;
+                    }
+                }
             }
         }
         Transport::Ws => {
@@ -380,11 +427,12 @@ fn main() {
         ("terrible", Link { rtt_ms: 300, loss: 0.20, jitter_ms: 80 }),
         ("jitter", Link { rtt_ms: 100, loss: 0.05, jitter_ms: 60 }),
     ];
-    let transports = [Transport::Mlp, Transport::Ws, Transport::Raw];
+    let transports = [Transport::Mlp, Transport::MlpFast, Transport::Ws, Transport::Raw];
 
     for tr in transports {
         let label = match tr {
             Transport::Mlp => "MLP framing",
+            Transport::MlpFast => "MLP fast (no ack wait)",
             Transport::Ws => "WebSocket-like",
             Transport::Raw => "Raw (no loss handling)",
         };
