@@ -69,7 +69,6 @@ fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f
             let mut all_frags: Vec<Vec<u8>> = Vec::new();
             let poll_start = Instant::now();
             while sender.queued_objects() > 0 || sender.in_flight() > 0 {
-                eprintln!("  loop: queued={} in_flight={}", sender.queued_objects(), sender.in_flight());
                 match sender.poll_fragment(Instant::now()) {
                     Some(f) => {
                         all_frags.push(f.bytes);
@@ -77,7 +76,6 @@ fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f
                     }
                     None => {
                         let pt = sender.poll_timeout(Instant::now());
-                        eprintln!("  None: pt={:?} queued={} in_flight={}", pt, sender.queued_objects(), sender.in_flight());
                         if let Some(w) = pt {
                             thread::sleep(w.max(Duration::from_millis(10)).min(Duration::from_millis(50)));
                         } else {

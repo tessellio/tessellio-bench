@@ -9,7 +9,7 @@ publish = false
 
 [dependencies]
 tessellio-core = { git = "https://github.com/tessellio/tessellio-core", rev = "decd48f281c4a7b3eba59fc62bf21b3f3c1bdbc7" }
-mlp-core = { git = "https://github.com/medialaneprotocol/mlp-core", rev = "7b78d63c045a21bcbebf792d45d9e10fe32204e8" }
+mlp-core = { git = "https://github.com/medialaneprotocol/mlp-core", rev = "b38a37a689f08e8518d868f03686189f893c52ba" }
 rand = "0.8"
 futures-util = "0.3"
 tokio = { version = "1", features = ["full"] }
