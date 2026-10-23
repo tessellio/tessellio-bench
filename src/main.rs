@@ -15,26 +15,8 @@ const HEIGHT: u32 = 360;
 const ITERS: u32 = 20;
 
 fn paint(phase: u32) -> CapturedFrame {
-    let mut rgba = vec![0_u8; (WIDTH * HEIGHT * 4) as usize];
-    for i in (0..rgba.len()).step_by(4) {
-        rgba[i] = 18;
-        rgba[i + 1] = 20;
-        rgba[i + 2] = 26;
-        rgba[i + 3] = 255;
-    }
-    let bx = 100 + (phase as u32 * 7) % 180;
-    for y in 80u32..120 {
-        for x in bx..bx + 40 {
-            if x < WIDTH && y < HEIGHT {
-                let o = ((y * WIDTH + x) * 4) as usize;
-                rgba[o] = 235;
-                rgba[o + 1] = 180;
-                rgba[o + 2] = 90;
-                rgba[o + 3] = 255;
-            }
-        }
-    }
-    CapturedFrame::new(WIDTH, HEIGHT, rgba).unwrap()
+    // Use tessellio's reference office scene for realistic content.
+    tessellio_core::scene::office(WIDTH, HEIGHT, phase)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -57,7 +39,8 @@ fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f
     let t0 = Instant::now();
     let planned = match encoder.encode(&capture) {
         Ok(Some(p)) => p,
-        _ => return (0.0, 0, 0.0, 0),
+        Ok(None) => return (0.0, 0, 0.0, 0),
+        Err(_) => return (0.0, 0, 0.0, 0),
     };
     let update = encoder.commit(planned, 1);
     let encode_ms = t0.elapsed().as_secs_f64() * 1000.0;
@@ -73,17 +56,37 @@ fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f
         Transport::Mlp => {
             let now = Instant::now();
             let grid = CellGrid::with_cell_size(WIDTH, HEIGHT, 64);
-            let mut sender = MediaSenderMachine::new(MediaSenderConfig::new(Carrier::DataChannel, grid), grid, now);
-            let mut receiver = MediaReceiverMachine::new(MediaReceiverConfig::for_carrier(Carrier::DataChannel), now);
+            let mut cfg = MediaSenderConfig::new(Carrier::Ws, grid);
+            cfg.bwe.pace_floor_bps = 100_000_000;
+            let mut sender = MediaSenderMachine::new(cfg, grid, now);
+            sender.estimator_mut().on_evidence(now);
+            let mut receiver = MediaReceiverMachine::new(MediaReceiverConfig::for_carrier(Carrier::Ws), now);
 
             // First attempt: enqueue + poll all fragments.
-            let _ = sender.enqueue_update(UpdateRequest::delta(vec![0u8; tess_bytes], cells.clone()), Instant::now());
+            let r = sender.enqueue_update(UpdateRequest::delta(vec![0u8; tess_bytes], cells.clone()), Instant::now());
+
             let mut all_frags: Vec<Vec<u8>> = Vec::new();
-            while let Some(f) = sender.poll_fragment(Instant::now()) {
-                all_frags.push(f.bytes);
-                if all_frags.len() > 10000 { break; }
+            let poll_start = Instant::now();
+            while sender.queued_objects() > 0 || sender.in_flight() > 0 {
+                match sender.poll_fragment(Instant::now()) {
+                    Some(f) => {
+                        all_frags.push(f.bytes);
+                        if all_frags.len() > 10000 { break; }
+                    }
+                    None => {
+                        if let Some(w) = sender.poll_timeout(Instant::now()) {
+                            thread::sleep(w.max(Duration::from_millis(1)).min(Duration::from_millis(5)));
+                        } else {
+                            // no scheduled retry: break to avoid busy loop
+                            break;
+                        }
+                        if poll_start.elapsed().as_secs() > 5 { break; }
+                    }
+                }
             }
             bytes_on_wire += sender.stats().bytes_sent;
+
+
 
             // Deliver with loss.
             let mut pending: Vec<Vec<u8>> = Vec::new();
@@ -148,6 +151,8 @@ fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f
                     if frags.len() > 10000 { break; }
                 }
                 bytes_on_wire += sender.stats().bytes_sent;
+
+
                 let mut still_pending: Vec<Vec<u8>> = Vec::new();
                 for f in &frags {
                     if rng.r#gen::<f64>() < link.loss {
@@ -184,7 +189,7 @@ fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f
                 thread::sleep(ri);
                 let fb = receiver.build_feedback(Instant::now());
                 let _ = sender.on_feedback(fb, Instant::now());
-                eprintln!("BWE after update: {} bps (loss {:.2})", sender.estimator().estimate().pace_bps, sender.estimator().loss_ratio());
+
             }
         }
         Transport::Ws => {
@@ -229,8 +234,11 @@ fn run_throughput(link: Link, rng: &mut impl Rng) -> (u64, f64, u32) {
 
     let now = Instant::now();
     let grid = CellGrid::with_cell_size(WIDTH, HEIGHT, 64);
-    let mut sender = MediaSenderMachine::new(MediaSenderConfig::new(Carrier::DataChannel, grid), grid, now);
-    let mut receiver = MediaReceiverMachine::new(MediaReceiverConfig::for_carrier(Carrier::DataChannel), now);
+    let mut cfg = MediaSenderConfig::new(Carrier::Ws, grid);
+    cfg.bwe.pace_floor_bps = 100_000_000;
+    let mut sender = MediaSenderMachine::new(cfg, grid, now);
+    sender.estimator_mut().on_evidence(now);
+    let mut receiver = MediaReceiverMachine::new(MediaReceiverConfig::for_carrier(Carrier::Ws), now);
 
     // Interleaved enqueue + poll: respect in_flight_cap.
     let mut pending_frags: Vec<Vec<u8>> = Vec::new();

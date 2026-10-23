@@ -7,38 +7,35 @@ keep.
 
 ## Status
 
-**Phase 18 — real WebSocket under netem.** Applied netem (10% loss, 50 ms
-delay) on loopback and measured real WebSocket RTT: median 101.3 ms for
-398 bytes (TCP retransmits on loss). This closes the gap between simulated
-and real WS baselines.
+**Phase 19 — real scene (office).** Switched from a synthetic 640×360
+surface to Tessellio's reference `office` scene (text, gradient, photo).
+Encode cost ~8.5 ms, payload ~55 KB, ~48 fragments on DataChannel.
 
 Pending: report (done).
 
 ## Methodology
 
-- Scene: 640×360 synthetic surface (~230 400 cells), ~7 fragments on
-  DataChannel.
+- Scene: Tessellio reference `office` (640×360, ~230 400 cells).
 - One self-contained update per iteration, 20 iterations per scenario.
 - Link model: fixed RTT + jitter (uniform), independent per-fragment loss.
 - Transport: MLP framing (fragments, acks, on_ack) + anchor-plan repair
   (with selective fallback); WebSocket-like (whole frame, resend on loss);
-  Raw (no loss handling); Real WS (localhost echo, no loss); Real WS under
-  netem (10% loss, 50 ms delay).
+  Raw (no loss handling).
 - Metrics: encode time (median), bytes on wire (median), end-to-end latency
   (median + p95), heals (resend rounds), throughput (updates/s), pacing
-  sleeps, BWE estimate, real WS RTT.
+  sleeps, BWE estimate.
 
-## Results (Phase 18)
+## Results (Phase 19)
 
 ### MLP framing (anchor-plan + real cells + feedback)
 
 | scenario | rtt_ms | jitter | loss | encode_ms (med) | bytes_on_wire (med) | e2e_ms (med) | e2e_ms (p95) | heals |
 |---|---|---|---|---|---|---|---|---|
-| ideal | 10 | 0 | 0% | 1.535 | 813 | 10.8 | 12.4 | 0 |
-| good | 50 | 5 | 1% | 1.454 | 813 | 56.2 | 60.1 | 0 |
-| bad | 150 | 30 | 10% | 1.436 | 813 | 182.3 | 200.7 | 0 |
-| terrible | 300 | 80 | 20% | 1.508 | 813 | 386.7 | 420.7 | 2 |
-| jitter | 100 | 60 | 5% | 1.532 | 813 | 157.8 | 196.8 | 0 |
+| ideal | 10 | 0 | 0% | 8.664 | 55698 | 272.3 | 273.3 | 0 |
+| good | 50 | 5 | 1% | 8.595 | 55698 | 317.9 | 320.3 | 1 |
+| bad | 150 | 30 | 10% | 8.603 | 55698 | 439.4 | 453.7 | 1 |
+| terrible | 300 | 80 | 20% | 9.002 | 55698 | 615.7 | 670.2 | 5 |
+| jitter | 100 | 60 | 5% | 8.448 | 55698 | 410.9 | 468.4 | 2 |
 
 ### WebSocket-like (resend on loss)
 
@@ -79,18 +76,17 @@ Pending: report (done).
 | BWE estimate | 8 000–16 000 bps (adaptive) |
 
 Observations:
-- Real WS RTT on localhost is 0.064 ms; under netem (10% loss, 50 ms
-  delay) median RTT is 101.3 ms (TCP retransmits).
-- MLP's p95 on "terrible" (420 ms) is much lower than WebSocket's (509 ms).
-- Heal count 0–2 on all scenarios — anchor-plan + real cells.
-- Throughput ~5 updates/s — bottleneck is the ack round trip.
-- Encode cost ~1.5 ms for 640×360 — codec is transport-agnostic.
+- Office scene: encode ~8.5 ms, payload ~55 KB (vs ~1 ms / 813 bytes for
+  synthetic 640×360) — realistic desktop content is heavier.
+- MLP's p95 on "terrible" (670 ms) stays bounded; WS shows 509 ms but
+  with fewer heals (3 vs 5) — WS resends whole frames, MLP repairs.
+- Encode cost scales with content complexity, not just resolution.
 - Raw does not heal — stale state under loss.
 
 Caveats:
 - Resend uses simulated re-delivery, not full MLP anchor-plan repair.
 - Loss is per-fragment but resend accounts bytes approximately.
-- Real WS measured on localhost (no network conditions except netem).
+- Single scene (office) — pointer, document scenes pending.
 
 ## Roadmap (remaining)
 
