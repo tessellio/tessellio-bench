@@ -184,7 +184,9 @@ fn run_throughput(link: Link, rng: &mut impl Rng) -> (u64, f64, u32) {
     let mut sender = MediaSenderMachine::new(MediaSenderConfig::new(Carrier::DataChannel, grid), grid, now);
     let mut receiver = MediaReceiverMachine::new(MediaReceiverConfig::for_carrier(Carrier::DataChannel), now);
 
-    // Enqueue 5 updates.
+    // Interleaved enqueue + poll: respect in_flight_cap.
+    let mut pending_frags: Vec<Vec<u8>> = Vec::new();
+    let mut pacing_sleeps = 0u32;
     for i in 0..5u64 {
         let capture = paint((i as u32) + 1);
         let planned = match encoder.encode(&capture) {
@@ -193,56 +195,34 @@ fn run_throughput(link: Link, rng: &mut impl Rng) -> (u64, f64, u32) {
         };
         let update = encoder.commit(planned, i + 1);
         let tess_bytes = update.payload_bytes();
-        let _ = sender.enqueue_update(UpdateRequest::delta(vec![0u8; tess_bytes], vec![0, 1]), Instant::now());
-    }
 
-    // Poll all fragments, respecting the pacer (sleep on refusal).
-    let mut all_frags: Vec<Vec<u8>> = Vec::new();
-    let mut pacing_sleeps = 0u32;
-    let poll_start = Instant::now();
-    while sender.queued_objects() > 0 || sender.in_flight() > 0 {
-        match sender.poll_fragment(Instant::now()) {
-            Some(f) => {
-                all_frags.push(f.bytes);
-                if all_frags.len() > 100000 { break; }
-            }
-            None => {
-                if let Some(wait) = sender.poll_timeout(Instant::now()) {
-                    thread::sleep(wait.min(Duration::from_millis(5)));
-                    pacing_sleeps += 1;
-                } else {
-                    thread::sleep(Duration::from_millis(1));
+        // Wait until in_flight has room.
+        while sender.in_flight() >= 2 {
+            // poll to drain
+            match sender.poll_fragment(Instant::now()) {
+                Some(f) => pending_frags.push(f.bytes),
+                None => {
+                    if let Some(w) = sender.poll_timeout(Instant::now()) {
+                        thread::sleep(w.min(Duration::from_millis(5)));
+                        pacing_sleeps += 1;
+                    } else {
+                        thread::sleep(Duration::from_millis(1));
+                    }
                 }
-                if poll_start.elapsed().as_secs() > 5 { break; }
+            }
+            if sender.queued_objects() == 0 && sender.in_flight() == 0 && pending_frags.is_empty() {
+                // nothing more to do this round
             }
         }
-    }
-    total_bytes += sender.stats().bytes_sent;
-    // record pacing sleeps in heals? no, separate. We'll just note via stderr.
-    eprintln!("pacing sleeps: {}", pacing_sleeps);
+        let _ = sender.enqueue_update(UpdateRequest::delta(vec![0u8; tess_bytes], vec![0, 1]), Instant::now());
+        // poll immediately
+        while let Some(f) = sender.poll_fragment(Instant::now()) {
+            pending_frags.push(f.bytes);
+        }
 
-    // Deliver with loss.
-    let mut pending: Vec<Vec<u8>> = Vec::new();
-    for f in &all_frags {
-        if rng.r#gen::<f64>() < link.loss {
-            pending.push(f.clone());
-            continue;
-        }
-        let delay = link.rtt_ms / 2 + rng.r#gen::<u64>() % (link.jitter_ms + 1);
-        thread::sleep(Duration::from_millis(delay));
-        let evs = receiver.on_message(f, Instant::now());
-        for ev in evs {
-            if let mlp_core::media::receiver::MediaReceiveEvent::Object(_) = ev {
-                // note applied for each; use update id 1 (simplified)
-            }
-        }
-    }
-    // Selective repair for lost fragments.
-    for _round in 0..3 {
-        if pending.is_empty() { break; }
-        heals += 1;
+        // Deliver pending fragments with loss.
         let mut still_pending: Vec<Vec<u8>> = Vec::new();
-        for f in &pending {
+        for f in &pending_frags {
             if rng.r#gen::<f64>() < link.loss {
                 still_pending.push(f.clone());
                 continue;
@@ -251,37 +231,64 @@ fn run_throughput(link: Link, rng: &mut impl Rng) -> (u64, f64, u32) {
             thread::sleep(Duration::from_millis(delay));
             let evs = receiver.on_message(f, Instant::now());
             for ev in evs {
-                if let mlp_core::media::receiver::MediaReceiveEvent::Object(_) = ev {}
-            }
-            // approximate: if not lost, consider delivered
-            if rng.r#gen::<f64>() >= link.loss {
-                // delivered
-            } else {
-                still_pending.push(f.clone());
+                if let mlp_core::media::receiver::MediaReceiveEvent::Object(_) = ev {
+                    receiver.note_applied(i + 1);
+                }
             }
         }
-        total_bytes += (pending.len() as u64) * 120;
-        pending = still_pending;
+        pending_frags = still_pending;
+        // selective repair for lost fragments
+        for _round in 0..3 {
+            if pending_frags.is_empty() { break; }
+            heals += 1;
+            let mut next_pending: Vec<Vec<u8>> = Vec::new();
+            for f in &pending_frags {
+                if rng.r#gen::<f64>() < link.loss {
+                    next_pending.push(f.clone());
+                    continue;
+                }
+                let delay = link.rtt_ms / 2 + rng.r#gen::<u64>() % (link.jitter_ms + 1);
+                thread::sleep(Duration::from_millis(delay));
+                let evs = receiver.on_message(f, Instant::now());
+                for ev in evs {
+                    if let mlp_core::media::receiver::MediaReceiveEvent::Object(_) = ev {
+                        receiver.note_applied(i + 1);
+                    }
+                }
+                if rng.r#gen::<f64>() < link.loss {
+                    next_pending.push(f.clone());
+                }
+            }
+            total_bytes += (pending_frags.len() as u64) * 120;
+            pending_frags = next_pending;
+        }
     }
+
+    // Drain remaining queued fragments.
+    while sender.queued_objects() > 0 || sender.in_flight() > 0 {
+        match sender.poll_fragment(Instant::now()) {
+            Some(f) => {
+                pending_frags.push(f.bytes);
+            }
+            None => {
+                if let Some(w) = sender.poll_timeout(Instant::now()) {
+                    thread::sleep(w.min(Duration::from_millis(5)));
+                    pacing_sleeps += 1;
+                } else {
+                    thread::sleep(Duration::from_millis(1));
+                }
+            }
+        }
+    }
+    total_bytes += sender.stats().bytes_sent;
+    eprintln!("pacing sleeps: {}", pacing_sleeps);
+
+    // ack
+    let ack = receiver.build_ack(Instant::now());
+    let _ = sender.on_ack(ack, Instant::now());
 
     let total_ms = t_start.elapsed().as_secs_f64() * 1000.0;
     (total_bytes, total_ms, heals)
-}
-
-fn print_throughput() {
-    let mut rng = rand::thread_rng();
-    let link = Link { rtt_ms: 100, loss: 0.10, jitter_ms: 30 };
-    let (bytes, ms, heals) = run_throughput(link, &mut rng);
-    println!();
-    println!("# Throughput (5 updates in flight, bad link)");
-    println!();
-    println!("| metric | value |");
-    println!("|---|---|");
-    println!("| total bytes on wire | {} |", bytes);
-    println!("| total time (ms) | {:.1} |", ms);
-    println!("| heals (resend rounds) | {} |", heals);
-    println!("| throughput (updates/s) | {:.1} |", 5.0 / (ms / 1000.0));
-    println!("| (see stderr for pacing sleeps) | |");
 }
 
 fn median(v: &[f64]) -> f64 {
@@ -354,5 +361,16 @@ fn main() {
             );
         }
     }
-    print_throughput();
+    let mut rng2 = rand::thread_rng();
+    let link = Link { rtt_ms: 150, loss: 0.10, jitter_ms: 30 };
+    let (tb, tm, th) = run_throughput(link, &mut rng2);
+    println!();
+    println!("# Throughput (5 updates in flight, bad link)");
+    println!();
+    println!("| metric | value |");
+    println!("|---|---|");
+    println!("| total bytes on wire | {} |", tb);
+    println!("| total time (ms) | {:.1} |", tm);
+    println!("| heals (resend rounds) | {} |", th);
+    println!("| throughput (updates/s) | {:.1} |", 5.0 / (tm / 1000.0));
 }

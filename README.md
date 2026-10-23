@@ -7,12 +7,11 @@ keep.
 
 ## Status
 
-**Phase 9 — pacing exercised.** The bench now respects the pacer: poll_fragment
-returns None on refusal, the bench sleeps poll_timeout and retries. Pacing
-sleeps: 0 on the tested scenario (pacer not the bottleneck for 5 updates).
+**Phase 10 — interleaved throughput.** 5 updates in flight on a bad link,
+interleaved enqueue+poll (respecting in_flight_cap=2): 5 updates/s,
+1 637 bytes on wire, 1 002 ms total, 188 333 pacing sleeps.
 
-Pending: MLP anchor-plan repair, pacing/BWE under congestion, real
-WebSocket, report.
+Pending: MLP anchor-plan repair, real WebSocket, report.
 
 ## Methodology
 
@@ -27,7 +26,7 @@ WebSocket, report.
   (median + p95), heals (resend rounds), throughput (updates/s), pacing
   sleeps.
 
-## Results (Phase 9)
+## Results (Phase 10)
 
 ### MLP framing (selective fragment repair)
 
@@ -63,24 +62,28 @@ WebSocket, report.
 
 | metric | value |
 |---|---|
-| total bytes on wire | 1 019 |
-| total time | 123.1 ms |
+| total bytes on wire | 1 637 |
+| total time | 1 002.3 ms |
 | heals (resend rounds) | 0 |
-| throughput | 40.6 updates/s |
-| pacing sleeps | 0 |
+| throughput | 5.0 updates/s |
+| pacing sleeps | 188 333 |
 
 Observations:
-- MLP's p95 on "terrible" (415 ms) is much lower than WebSocket's (859 ms)
-  — selective repair keeps latency bounded.
-- Throughput ~41 updates/s on a bad link with 5 updates in flight.
-- Encode cost ~1 ms for 640×360 — codec scales with surface size.
-- Pacer did not throttle (0 sleeps) — single burst, plenty of tokens.
+- Interleaved enqueue+poll respects in_flight_cap=2: 5 updates take ~1 s
+  (5 × RTT) because each update waits for the previous to leave the
+  in-flight window.
+- Throughput ~5 updates/s — bottleneck is the ack round trip, not the
+  codec (encode ~1 ms).
+- Pacer sleep count is high (busy-wait) — a proper driver would use
+  poll_timeout to arm a timer instead of spinning.
+- MLP's p95 on "terrible" (415 ms) is much lower than WebSocket's (859 ms).
+- Encode cost ~1 ms for 640×360 — codec is transport-agnostic.
 - Raw does not heal — stale state under loss.
 
 Caveats:
 - Resend is simulated (re-deliver lost fragments), not MLP's anchor-plan
   repair.
-- No pacing/BWE under congestion yet — pacer not exercised.
+- No pacing/BWE under congestion — pacer not exercised meaningfully.
 - Loss is per-fragment but resend accounts bytes approximately.
 
 ## Roadmap
