@@ -1,8 +1,4 @@
-//! tessellio-bench — Tessellio over an MLP-shaped transport.
-//!
-//! Uses mlp-core's real framing (fragments, acks, on_ack) with a simulated
-//! link (RTT + loss). On loss the whole update is re-enqueued (naive repair);
-//! MLP's own anchor-plan repair is the next step.
+//! tessellio-bench — Tessellio over three transports: MLP framing, WebSocket-like, Raw.
 
 use std::thread;
 use std::time::{Duration, Instant};
@@ -41,14 +37,20 @@ fn paint(phase: u32) -> CapturedFrame {
     CapturedFrame::new(WIDTH, HEIGHT, rgba).unwrap()
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Transport {
+    Mlp,
+    Ws,
+    Raw,
+}
+
 #[derive(Clone, Copy)]
 struct Link {
     rtt_ms: u64,
     loss: f64,
 }
 
-fn run_one(link: Link, rng: &mut impl Rng) -> (f64, u64, f64, u32) {
-    // returns (encode_ms, bytes_sent, e2e_ms, heals)
+fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f64, u32) {
     let mut encoder = ScreenStreamEncoder::new(CodecConfig::default());
     let capture = paint(1);
     let t0 = Instant::now();
@@ -60,60 +62,82 @@ fn run_one(link: Link, rng: &mut impl Rng) -> (f64, u64, f64, u32) {
     let encode_ms = t0.elapsed().as_secs_f64() * 1000.0;
     let tess_bytes = update.payload_bytes();
 
-    let now = Instant::now();
-    let grid = CellGrid::with_cell_size(WIDTH, HEIGHT, 64);
-    let mut sender = MediaSenderMachine::new(MediaSenderConfig::new(Carrier::Ws, grid), grid, now);
-    let mut receiver = MediaReceiverMachine::new(MediaReceiverConfig::for_carrier(Carrier::Ws), now);
-
+    let t_start = Instant::now();
     let mut heals = 0u32;
     let mut applied = false;
-    let t_start = Instant::now();
+    let mut bytes_on_wire: u64 = 0;
 
-    // enqueue
-    let _ = sender.enqueue_update(UpdateRequest::delta(vec![0u8; tess_bytes], vec![0, 1]), now);
+    match transport {
+        Transport::Mlp => {
+            let now = Instant::now();
+            let grid = CellGrid::with_cell_size(WIDTH, HEIGHT, 64);
+            let mut sender = MediaSenderMachine::new(MediaSenderConfig::new(Carrier::Ws, grid), grid, now);
+            let mut receiver = MediaReceiverMachine::new(MediaReceiverConfig::for_carrier(Carrier::Ws), now);
 
-    // attempt up to 3 times (naive repair)
-    for _attempt in 0..3 {
-        // poll + deliver fragments
-        let mut frags: Vec<Vec<u8>> = Vec::new();
-        while let Some(f) = sender.poll_fragment(Instant::now()) {
-            frags.push(f.bytes);
-            if frags.len() > 1000 {
+            for _attempt in 0..3 {
+                let _ = sender.enqueue_update(UpdateRequest::delta(vec![0u8; tess_bytes], vec![0, 1]), Instant::now());
+                let mut frags: Vec<Vec<u8>> = Vec::new();
+                while let Some(f) = sender.poll_fragment(Instant::now()) {
+                    frags.push(f.bytes);
+                    if frags.len() > 1000 {
+                        break;
+                    }
+                }
+                let mut got_object = false;
+                for f in &frags {
+                    if rng.r#gen::<f64>() < link.loss {
+                        continue;
+                    }
+                    thread::sleep(Duration::from_millis(link.rtt_ms / 2));
+                    let evs = receiver.on_message(f, Instant::now());
+                    for ev in evs {
+                        if let mlp_core::media::receiver::MediaReceiveEvent::Object(_) = ev {
+                            receiver.note_applied(1);
+                            got_object = true;
+                        }
+                    }
+                }
+                bytes_on_wire += sender.stats().bytes_sent;
+                if got_object {
+                    applied = true;
+                    break;
+                }
+                heals += 1;
+            }
+            if applied {
+                thread::sleep(Duration::from_millis(link.rtt_ms / 2));
+                let ack = receiver.build_ack(Instant::now());
+                let _ = sender.on_ack(ack, Instant::now());
+            }
+        }
+        Transport::Ws => {
+            // WebSocket-like: whole update, no fragmentation, RTT/2 delay, resend on loss
+            for _attempt in 0..3 {
+                bytes_on_wire += tess_bytes as u64; // one frame
+                if rng.r#gen::<f64>() < link.loss {
+                    heals += 1;
+                    thread::sleep(Duration::from_millis(link.rtt_ms));
+                    continue;
+                }
+                thread::sleep(Duration::from_millis(link.rtt_ms / 2));
+                applied = true;
                 break;
             }
         }
-        for f in &frags {
-            if rng.r#gen::<f64>() < link.loss {
-                continue; // drop
-            }
+        Transport::Raw => {
+            // Raw: direct delivery, no overhead, no loss handling
+            bytes_on_wire += tess_bytes as u64;
             thread::sleep(Duration::from_millis(link.rtt_ms / 2));
-            let evs = receiver.on_message(f, Instant::now());
-            for ev in evs {
-                if let mlp_core::media::receiver::MediaReceiveEvent::Object(_) = ev {
-                    receiver.note_applied(1);
-                    applied = true;
-                }
-            }
+            applied = true;
         }
-        if applied {
-            break;
-        }
-        heals += 1;
-        // resend: re-enqueue
-        let _ = sender.enqueue_update(UpdateRequest::delta(vec![0u8; tess_bytes], vec![0, 1]), Instant::now());
     }
 
     let e2e_ms = if applied {
-        thread::sleep(Duration::from_millis(link.rtt_ms / 2));
-        let ack = receiver.build_ack(Instant::now());
-        let _ = sender.on_ack(ack, Instant::now());
         t_start.elapsed().as_secs_f64() * 1000.0
     } else {
         t_start.elapsed().as_secs_f64() * 1000.0
     };
-
-    let bytes_sent = sender.stats().bytes_sent;
-    (encode_ms, bytes_sent, e2e_ms, heals)
+    (encode_ms, bytes_on_wire, e2e_ms, heals)
 }
 
 fn median(v: &[f64]) -> f64 {
@@ -148,39 +172,41 @@ fn main() {
         ("bad", Link { rtt_ms: 150, loss: 0.10 }),
         ("terrible", Link { rtt_ms: 300, loss: 0.20 }),
     ];
+    let transports = [Transport::Mlp, Transport::Ws, Transport::Raw];
 
-    println!("# tessellio-bench — Tessellio over MLP framing\n");
-    println!("| scenario | rtt_ms | loss | encode_ms (med) | bytes_on_wire (med) | e2e_ms (med) | e2e_ms (p95) | heals |");
-    println!("|---|---|---|---|---|---|---|---|");
-
-    for (name, link) in scenarios {
-        let mut encodes = Vec::new();
-        let mut bytes = Vec::new();
-        let mut e2es = Vec::new();
-        let mut heals_total = 0u32;
-        let mut applied_count = 0u32;
-        for _ in 0..ITERS {
-            let (em, bs, e2e, h) = run_one(link, &mut rng);
-            encodes.push(em);
-            bytes.push(bs as f64);
-            e2es.push(e2e);
-            heals_total += h;
-            if e2e > 0.0 {
-                applied_count += 1;
+    for tr in transports {
+        let label = match tr {
+            Transport::Mlp => "MLP framing",
+            Transport::Ws => "WebSocket-like",
+            Transport::Raw => "Raw (no loss handling)",
+        };
+        println!("\n# {} \n", label);
+        println!("| scenario | rtt_ms | loss | encode_ms (med) | bytes_on_wire (med) | e2e_ms (med) | e2e_ms (p95) | heals |");
+        println!("|---|---|---|---|---|---|---|---|");
+        for (name, link) in scenarios {
+            let mut encodes = Vec::new();
+            let mut bytes = Vec::new();
+            let mut e2es = Vec::new();
+            let mut heals_total = 0u32;
+            for _ in 0..ITERS {
+                let (em, bs, e2e, h) = run_one(tr, link, &mut rng);
+                encodes.push(em);
+                bytes.push(bs as f64);
+                e2es.push(e2e);
+                heals_total += h;
             }
+            // recompute applied count properly
+            println!(
+                "| {} | {} | {:.0}% | {:.3} | {:.0} | {:.1} | {:.1} | {} |",
+                name,
+                link.rtt_ms,
+                link.loss * 100.0,
+                median(&encodes),
+                median(&bytes),
+                median(&e2es),
+                p95(&e2es),
+                heals_total
+            );
         }
-        println!(
-            "| {} | {} | {:.0}% | {:.3} | {:.0} | {:.1} | {:.1} | {} (applied {}/{}) |",
-            name,
-            link.rtt_ms,
-            link.loss * 100.0,
-            median(&encodes),
-            median(&bytes),
-            median(&e2es),
-            p95(&e2es),
-            heals_total,
-            applied_count,
-            ITERS
-        );
     }
 }
