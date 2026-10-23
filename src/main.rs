@@ -226,7 +226,7 @@ fn run_throughput(link: Link, rng: &mut impl Rng) -> (u64, f64, u32) {
     // Interleaved enqueue + poll: respect in_flight_cap.
     let mut pending_frags: Vec<Vec<u8>> = Vec::new();
     let mut pacing_sleeps = 0u32;
-    for i in 0..5u64 {
+    for i in 0..50u64 {
         let capture = paint((i as u32) + 1);
         let planned = match encoder.encode(&capture) {
             Ok(Some(p)) => p,
@@ -322,6 +322,7 @@ fn run_throughput(link: Link, rng: &mut impl Rng) -> (u64, f64, u32) {
     total_bytes += sender.stats().bytes_sent;
     eprintln!("pacing sleeps: {}", pacing_sleeps);
 
+    eprintln!("BWE estimate bps: {}", sender.estimator().estimate().pace_bps);
     // ack
     let ack = receiver.build_ack(Instant::now());
     let _ = sender.on_ack(ack, Instant::now());
@@ -411,5 +412,5 @@ fn main() {
     println!("| total bytes on wire | {} |", tb);
     println!("| total time (ms) | {:.1} |", tm);
     println!("| heals (resend rounds) | {} |", th);
-    println!("| throughput (updates/s) | {:.1} |", 5.0 / (tm / 1000.0));
+    println!("| throughput (updates/s) | {:.1} |", 50.0 / (tm / 1000.0));
 }
