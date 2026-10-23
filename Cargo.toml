@@ -11,6 +11,9 @@ publish = false
 tessellio-core = { git = "https://github.com/tessellio/tessellio-core", rev = "decd48f281c4a7b3eba59fc62bf21b3f3c1bdbc7" }
 mlp-core = { git = "https://github.com/medialaneprotocol/mlp-core", rev = "7b78d63c045a21bcbebf792d45d9e10fe32204e8" }
 rand = "0.8"
+futures-util = "0.3"
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = "0.24"
 
 [lints.rust]
 unsafe_code = "forbid"

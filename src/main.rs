@@ -423,4 +423,46 @@ fn main() {
     println!("| total time (ms) | {:.1} |", tm);
     println!("| heals (resend rounds) | {} |", th);
     println!("| throughput (updates/s) | {:.1} |", 50.0 / (tm / 1000.0));
+    // Real WebSocket round-trip (informational)
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let ws = rt.block_on(ws_rtt());
+    println!();
+    println!("# Real WebSocket round-trip (localhost)");
+    println!();
+    println!("| metric | value |");
+    println!("|---|---|");
+    println!("| RTT (398 bytes) | {:.3} ms |", ws);
+}
+
+// Real WebSocket round-trip (informational): localhost echo server.
+async fn ws_rtt() -> f64 {
+    use futures_util::{SinkExt, StreamExt};
+    use tokio::net::TcpListener;
+    use tokio_tungstenite::accept_async;
+
+    // spawn echo server
+    let listener = TcpListener::bind("127.0.0.1:9001").await.unwrap();
+    tokio::spawn(async move {
+        if let Ok((stream, _)) = listener.accept().await {
+            if let Ok(mut ws) = accept_async(stream).await {
+                while let Some(Ok(msg)) = ws.next().await {
+                    if ws.send(msg).await.is_err() {
+                        break;
+                    }
+                }
+            }
+        }
+    });
+
+    // client
+    let (mut ws, _) = tokio_tungstenite::connect_async("ws://127.0.0.1:9001")
+        .await
+        .unwrap();
+    let payload = vec![0u8; 398];
+    let t0 = Instant::now();
+    ws.send(tokio_tungstenite::tungstenite::Message::Binary(payload.into()))
+        .await
+        .unwrap();
+    if let Some(Ok(_)) = ws.next().await {}
+    t0.elapsed().as_secs_f64() * 1000.0
 }

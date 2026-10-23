@@ -7,12 +7,12 @@ keep.
 
 ## Status
 
-**Phase 16 — BWE adaptation.** The bench now waits for a closed feedback
-window (`receiver.report_interval()`) before calling `build_feedback` +
-`on_feedback`. BWE raises from floor (8 000) to 16 000 bps on some
-updates — the estimator saw enough goodput to lift the ceiling.
+**Phase 17 — real WebSocket round-trip.** Added a localhost WebSocket echo
+server (tokio-tungstenite) measuring real RTT: 0.064 ms for 398 bytes.
+This is the floor for a real WS transport; simulated WS baseline remains
+for loss scenarios (TCP is reliable).
 
-Pending: real WebSocket, report (done).
+Pending: pacing/BWE under congestion, report (done).
 
 ## Methodology
 
@@ -22,12 +22,12 @@ Pending: real WebSocket, report (done).
 - Link model: fixed RTT + jitter (uniform), independent per-fragment loss.
 - Transport: MLP framing (fragments, acks, on_ack) + anchor-plan repair
   (with selective fallback); WebSocket-like (whole frame, resend on loss);
-  Raw (no loss handling).
+  Raw (no loss handling); Real WS (localhost echo, no loss).
 - Metrics: encode time (median), bytes on wire (median), end-to-end latency
   (median + p95), heals (resend rounds), throughput (updates/s), pacing
-  sleeps, BWE estimate.
+  sleeps, BWE estimate, real WS RTT.
 
-## Results (Phase 16)
+## Results (Phase 17)
 
 ### MLP framing (anchor-plan + real cells + feedback)
 
@@ -59,6 +59,12 @@ Pending: real WebSocket, report (done).
 | terrible | 300 | 80 | 20% | 1.011 | 727 | 194.6 | 225.1 | 0 |
 | jitter | 100 | 60 | 5% | 1.020 | 727 | 85.1 | 103.1 | 0 |
 
+### Real WebSocket (localhost echo, 398 bytes)
+
+| metric | value |
+|---|---|
+| RTT | 0.064 ms |
+
 ### Throughput (20 updates in flight, bad link)
 
 | metric | value |
@@ -71,8 +77,8 @@ Pending: real WebSocket, report (done).
 | BWE estimate | 8 000–16 000 bps (adaptive) |
 
 Observations:
-- BWE now adapts: 8 000 → 16 000 bps on some updates (closed feedback
-  windows provide goodput signal).
+- Real WS RTT on localhost is 0.064 ms — negligible; real-world WS adds
+  network RTT + TCP overhead.
 - MLP's p95 on "terrible" (420 ms) is much lower than WebSocket's (509 ms).
 - Heal count 0–2 on all scenarios — anchor-plan + real cells.
 - Throughput ~5 updates/s — bottleneck is the ack round trip.
@@ -82,11 +88,12 @@ Observations:
 Caveats:
 - Resend uses simulated re-delivery, not full MLP anchor-plan repair.
 - Loss is per-fragment but resend accounts bytes approximately.
+- Real WS measured on localhost (no network conditions).
 
 ## Roadmap (remaining)
 
-1. **WebSocket baseline with real WS** — replace simulation with
-   tokio-tungstenite.
+1. **WebSocket baseline with real WS under loss** — TCP doesn't lose; need
+   network emulation (netem) or application-level drop.
 2. **Report** — markdown + plots in `results/` (done).
 
 ## Building
