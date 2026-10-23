@@ -10,8 +10,8 @@ use mlp_core::media::sender::{MediaSenderConfig, MediaSenderMachine, UpdateReque
 use rand::Rng;
 use tessellio_core::{CapturedFrame, CodecConfig, ScreenStreamEncoder};
 
-const WIDTH: u32 = 320;
-const HEIGHT: u32 = 180;
+const WIDTH: u32 = 640;
+const HEIGHT: u32 = 360;
 const ITERS: u32 = 20;
 
 fn paint(phase: u32) -> CapturedFrame {
@@ -72,8 +72,8 @@ fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f
         Transport::Mlp => {
             let now = Instant::now();
             let grid = CellGrid::with_cell_size(WIDTH, HEIGHT, 64);
-            let mut sender = MediaSenderMachine::new(MediaSenderConfig::new(Carrier::Ws, grid), grid, now);
-            let mut receiver = MediaReceiverMachine::new(MediaReceiverConfig::for_carrier(Carrier::Ws), now);
+            let mut sender = MediaSenderMachine::new(MediaSenderConfig::new(Carrier::DataChannel, grid), grid, now);
+            let mut receiver = MediaReceiverMachine::new(MediaReceiverConfig::for_carrier(Carrier::DataChannel), now);
 
             for _attempt in 0..3 {
                 let _ = sender.enqueue_update(UpdateRequest::delta(vec![0u8; tess_bytes], vec![0, 1]), Instant::now());
