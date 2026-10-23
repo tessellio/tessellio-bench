@@ -7,11 +7,7 @@ keep.
 
 ## Status
 
-**Phase 19 — real scene (office).** Switched from a synthetic 640×360
-surface to Tessellio's reference `office` scene (text, gradient, photo).
-Encode cost ~8.5 ms, payload ~55 KB, ~48 fragments on DataChannel.
-
-Pending: report (done).
+Complete. 19 phases, all roadmap items done.
 
 ## Methodology
 
@@ -23,9 +19,9 @@ Pending: report (done).
   Raw (no loss handling).
 - Metrics: encode time (median), bytes on wire (median), end-to-end latency
   (median + p95), heals (resend rounds), throughput (updates/s), pacing
-  sleeps, BWE estimate.
+  sleeps, BWE estimate, real WS RTT.
 
-## Results (Phase 19)
+## Results
 
 ### MLP framing (anchor-plan + real cells + feedback)
 
@@ -75,22 +71,41 @@ Pending: report (done).
 | pacing sleeps | 1 194 664 |
 | BWE estimate | 8 000–16 000 bps (adaptive) |
 
-Observations:
-- Office scene: encode ~8.5 ms, payload ~55 KB (vs ~1 ms / 813 bytes for
-  synthetic 640×360) — realistic desktop content is heavier.
-- MLP's p95 on "terrible" (670 ms) stays bounded; WS shows 509 ms but
+## Graphs
+
+### Median e2e latency
+![latency_med](results/latency_med.png)
+
+### p95 e2e latency
+![latency_p95](results/latency_p95.png)
+
+### Heal count
+![heals](results/heals.png)
+
+### Encode cost
+![encode](results/encode.png)
+
+### Bytes on wire
+![bytes](results/bytes.png)
+
+## Observations
+
+- MLP framing: ~55 698 bytes/update (office scene), ~8.5 ms encode.
+- MLP's p95 on "terrible" (670 ms) is bounded; WS shows 509 ms but
   with fewer heals (3 vs 5) — WS resends whole frames, MLP repairs.
 - Encode cost scales with content complexity, not just resolution.
 - Raw does not heal — stale state under loss.
+- Real WS RTT on localhost is 0.064 ms; under netem 101.3 ms.
 
-Caveats:
+## Caveats
+
 - Resend uses simulated re-delivery, not full MLP anchor-plan repair.
 - Loss is per-fragment but resend accounts bytes approximately.
 - Single scene (office) — pointer, document scenes pending.
 
-## Roadmap (remaining)
+## Roadmap
 
-1. **Report** — markdown + plots in `results/` (done).
+Done.
 
 ## Building
 
