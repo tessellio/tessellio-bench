@@ -7,49 +7,54 @@ keep.
 
 ## Status
 
-**MVP.** Currently measures the codec's encode cost and end-to-end latency
-over a *naïve* lossy/delayed link model (no repair, no pacing). The
-**MLP transport** is the next integration step: the bench will then compare
-Tessellio-over-MLP against Tessellio-over-WebSocket and a raw baseline on the
-same scenarios.
+**Phase 2 — MLP framing integrated.** The bench now drives Tessellio updates
+through `mlp-core`'s real framing: `MediaSenderMachine` enqueues the update,
+`poll_fragment` releases fragments, a simulated link drops them with the
+configured probability and delays them by RTT/2, `MediaReceiverMachine`
+assembles the object and `note_applied` + `build_ack` close the loop. On a
+lost fragment the whole update is re-enqueued (naïve repair on top of MLP
+framing). MLP's own anchor-plan repair and pacing/BWE are the next step.
 
-## Methodology (MVP)
+WebSocket baseline and raw baseline are still pending.
 
-- Scene: 320×180 synthetic surface (office-like: background + moving block).
+## Methodology
+
+- Scene: 320×180 synthetic surface (background + moving block).
 - One self-contained update per iteration, 20 iterations per scenario.
-- Link model: fixed RTT, independent per-update loss probability.
-- Naïve transport: on loss, resend the whole update after one RTT (no
-  fragmentation, no pacing, no BWE).
-- Metrics: encode time (median), payload bytes, end-to-end latency
-  (median + p95), lost updates.
+- Link model: fixed RTT, independent per-fragment loss probability.
+- Transport: MLP framing (fragments, acks, on_ack) + naïve resend on loss.
+- Metrics: encode time (median), bytes on wire (median), end-to-end latency
+  (median + p95), heals (resends), applied count.
 
-## Results (MVP, naïve transport)
+## Results (Phase 2, MLP framing + naïve repair)
 
-| scenario | rtt_ms | loss | encode_ms (med) | bytes | e2e_ms (med) | e2e_ms (p95) | lost |
+| scenario | rtt_ms | loss | encode_ms (med) | bytes_on_wire (med) | e2e_ms (med) | e2e_ms (p95) | heals (applied) |
 |---|---|---|---|---|---|---|---|
-| ideal | 10 | 0% | 0.402 | 398 | 5.4 | 5.6 | 0/20 |
-| good | 50 | 1% | 0.402 | 398 | 25.4 | 25.6 | 0/20 |
-| bad | 150 | 10% | 0.401 | 398 | 75.4 | 75.6 | 0/20 |
-| terrible | 300 | 20% | 0.395 | 398 | 150.4 | 150.5 | 0/20 |
+| ideal | 10 | 0% | 0.528 | 484 | 10.2 | 11.9 | 0 (20/20) |
+| good | 50 | 1% | 0.424 | 484 | 50.2 | 50.2 | 0 (20/20) |
+| bad | 150 | 10% | 0.416 | 484 | 150.2 | 150.2 | 5 (20/20) |
+| terrible | 300 | 20% | 0.408 | 484 | 300.2 | 300.4 | 5 (20/20) |
 
 Observations:
-- Encode cost is stable (~0.4 ms) and independent of link conditions — the
-  codec does not know about the transport, as designed.
-- Payload is 398 bytes for a 57 600-cell surface update.
-- End-to-end latency is dominated by RTT (as expected for a naïve
-  transport with no pipelining).
-- No updates were lost in 20 iterations even at 20 % loss — the naïve
-  resend maskes it, but at the cost of latency (heal = 1.5× RTT).
+- MLP framing adds ~86 bytes of overhead per update (484 on wire vs 398
+  payload) — fragmentation header, TLVs, ack metadata.
+- Encode cost stays ~0.4 ms — codec is transport-agnostic.
+- All updates applied in every scenario (naïve repair on loss works).
+- Heal count is low because loss is per-fragment and there is only one
+  fragment per update in this MVP; multi-fragment updates will stress repair
+  more.
+- E2E latency still dominated by RTT — MLP pacing/BWE not yet active in
+  this bench (single update, no congestion).
 
 ## Roadmap
 
-1. **MLP integration** — replace the naïve transport with `mlp-core`
-   machines (sender/receiver, fragmentation, pacing, BWE, repair).
-2. **WebSocket baseline** — same scenarios over a WebSocket-shaped transport.
-3. **Raw baseline** — direct delivery, no overhead.
-4. **Scenarios** — office scene, pointer-1px, loss 0/5/10/20 %, RTT
+1. **MLP repair** — replace naïve resend with MLP's anchor-plan repair.
+2. **MLP pacing/BWE** — multiple updates in flight, measure pacing.
+3. **WebSocket baseline** — same scenarios over a WebSocket-shaped transport.
+4. **Raw baseline** — direct delivery, no overhead.
+5. **Scenarios** — office scene, pointer-1px, loss 0/5/10/20 %, RTT
    20/50/100/150/300 ms, jitter.
-5. **Report** — markdown table + per-scenario plots, published in
+6. **Report** — markdown table + per-scenario plots, published in
    `results/`.
 
 ## Building
