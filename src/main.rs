@@ -63,7 +63,7 @@ fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f
             let mut receiver = MediaReceiverMachine::new(MediaReceiverConfig::for_carrier(Carrier::Ws), now);
 
             // First attempt: enqueue + poll all fragments.
-            let r = sender.enqueue_update(UpdateRequest::delta(vec![0u8; tess_bytes], cells.clone()), Instant::now());
+            let _ = sender.enqueue_update(UpdateRequest::delta(vec![0u8; tess_bytes], cells.clone()), Instant::now());
 
             let mut all_frags: Vec<Vec<u8>> = Vec::new();
             let poll_start = Instant::now();
@@ -183,12 +183,12 @@ fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f
                 let ack = receiver.build_ack(Instant::now());
                 let _ = sender.on_ack(ack, Instant::now());
                 // feed goodput to BWE
-                let fb = receiver.build_feedback(Instant::now());
+                let _fb = receiver.build_feedback(Instant::now());
                 // wait for a closed feedback window
                 let ri = receiver.report_interval();
                 thread::sleep(ri);
-                let fb = receiver.build_feedback(Instant::now());
-                let _ = sender.on_feedback(fb, Instant::now());
+                let _fb = receiver.build_feedback(Instant::now());
+                let _ = sender.on_feedback(_fb, Instant::now());
 
             }
         }
@@ -242,7 +242,6 @@ fn run_throughput(link: Link, rng: &mut impl Rng) -> (u64, f64, u32) {
 
     // Interleaved enqueue + poll: respect in_flight_cap.
     let mut pending_frags: Vec<Vec<u8>> = Vec::new();
-    let mut pacing_sleeps = 0u32;
     for i in 0..50u64 {
         let capture = paint((i as u32) + 1);
         let planned = match encoder.encode(&capture) {
@@ -261,7 +260,6 @@ fn run_throughput(link: Link, rng: &mut impl Rng) -> (u64, f64, u32) {
                 None => {
                     if let Some(w) = sender.poll_timeout(Instant::now()) {
                         thread::sleep(w.min(Duration::from_millis(5)));
-                        pacing_sleeps += 1;
                     } else {
                         thread::sleep(Duration::from_millis(1));
                     }
@@ -330,7 +328,6 @@ fn run_throughput(link: Link, rng: &mut impl Rng) -> (u64, f64, u32) {
             None => {
                 if let Some(w) = sender.poll_timeout(Instant::now()) {
                     thread::sleep(w.min(Duration::from_millis(5)));
-                    pacing_sleeps += 1;
                 } else {
                     thread::sleep(Duration::from_millis(1));
                 }
@@ -338,9 +335,7 @@ fn run_throughput(link: Link, rng: &mut impl Rng) -> (u64, f64, u32) {
         }
     }
     total_bytes += sender.stats().bytes_sent;
-    eprintln!("pacing sleeps: {}", pacing_sleeps);
 
-    eprintln!("BWE estimate bps: {}", sender.estimator().estimate().pace_bps);
     // ack
     let ack = receiver.build_ack(Instant::now());
     let _ = sender.on_ack(ack, Instant::now());
