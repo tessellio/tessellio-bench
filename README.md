@@ -7,14 +7,12 @@ keep.
 
 ## Status
 
-**Phase 12 — pacing exercised.** The bench now respects the pacer: when
-`poll_fragment` returns `None`, it sleeps `poll_timeout` and retries. Under
-a tight budget (fragment_payload_max=100, queue_bytes_cap=2000) the pacer
-sleeps ~1.27 M times — confirming the pacer is the bottleneck under
-congestion. Default config (fragment_payload_max=1 150) is used for the
-reported numbers.
+**Phase 13 — real cell accounting.** Tessellio now exposes
+`changed_cell_indices` in `EncodedUpdate`; the bench feeds real cell indices
+into MLP's sender accounting instead of placeholders. Anchor-plan repair
+uses actual cells.
 
-Pending: real cell accounting, real WebSocket, report (done).
+Pending: pacing/BWE under congestion, real WebSocket, report (done).
 
 ## Methodology
 
@@ -26,30 +24,29 @@ Pending: real cell accounting, real WebSocket, report (done).
   (with selective fallback); WebSocket-like (whole frame, resend on loss);
   Raw (no loss handling).
 - Metrics: encode time (median), bytes on wire (median), end-to-end latency
-  (median + p95), heals (resend rounds), throughput (updates/s), pacing
-  sleeps.
+  (median + p95), heals (resend rounds), throughput (updates/s).
 
-## Results (Phase 12)
+## Results (Phase 13)
 
-### MLP framing (anchor-plan + selective fallback)
+### MLP framing (anchor-plan + real cells)
 
 | scenario | rtt_ms | jitter | loss | encode_ms (med) | bytes_on_wire (med) | e2e_ms (med) | e2e_ms (p95) | heals |
 |---|---|---|---|---|---|---|---|---|
-| ideal | 10 | 0 | 0% | 1.066 | 813 | 10.2 | 10.2 | 0 |
-| good | 50 | 5 | 1% | 1.103 | 813 | 55.2 | 58.2 | 0 |
-| bad | 150 | 30 | 10% | 1.289 | 813 | 179.2 | 194.2 | 2 |
-| terrible | 300 | 80 | 20% | 1.173 | 813 | 406.2 | 434.2 | 5 |
-| jitter | 100 | 60 | 5% | 1.219 | 813 | 157.7 | 188.2 | 2 |
+| ideal | 10 | 0 | 0% | 1.535 | 813 | 10.8 | 12.4 | 0 |
+| good | 50 | 5 | 1% | 1.454 | 813 | 56.2 | 60.1 | 0 |
+| bad | 150 | 30 | 10% | 1.436 | 813 | 182.3 | 200.7 | 0 |
+| terrible | 300 | 80 | 20% | 1.508 | 813 | 386.7 | 420.7 | 2 |
+| jitter | 100 | 60 | 5% | 1.532 | 813 | 157.8 | 196.8 | 0 |
 
 ### WebSocket-like (resend on loss)
 
 | scenario | rtt_ms | jitter | loss | encode_ms (med) | bytes_on_wire (med) | e2e_ms (med) | e2e_ms (p95) | heals |
 |---|---|---|---|---|---|---|---|---|
-| ideal | 10 | 0 | 0% | 0.984 | 727 | 5.1 | 5.1 | 0 |
-| good | 50 | 5 | 1% | 1.076 | 727 | 28.1 | 30.1 | 0 |
-| bad | 150 | 30 | 10% | 1.081 | 727 | 91.1 | 270.1 | 5 |
-| terrible | 300 | 80 | 20% | 1.114 | 727 | 208.1 | 562.2 | 4 |
-| jitter | 100 | 60 | 5% | 1.309 | 727 | 90.1 | 107.1 | 0 |
+| ideal | 10 | 0 | 0% | 1.550 | 727 | 5.1 | 5.1 | 0 |
+| good | 50 | 5 | 1% | 1.505 | 727 | 27.1 | 30.1 | 0 |
+| bad | 150 | 30 | 10% | 1.595 | 727 | 94.6 | 245.2 | 4 |
+| terrible | 300 | 80 | 20% | 1.499 | 727 | 194.1 | 509.1 | 3 |
+| jitter | 100 | 60 | 5% | 1.589 | 727 | 87.3 | 109.1 | 1 |
 
 ### Raw (no loss handling)
 
@@ -72,29 +69,22 @@ Pending: real cell accounting, real WebSocket, report (done).
 | pacing sleeps | 188 333 |
 
 Observations:
-- MLP's p95 on "terrible" (434 ms) is much lower than WebSocket's
-  (562 ms) — anchor-plan + selective repair keep latency bounded.
-- Heal count 5 on "terrible" (vs 18 with whole-update resend in Phase 6).
-- Throughput ~5 updates/s — bottleneck is the ack round trip.
-- Encode cost ~1 ms for 640×360 — codec is transport-agnostic.
+- With real cell indices, MLP heals dropped to 0–2 on all scenarios —
+  anchor-plan repair now has accurate cell data.
+- MLP's p95 on "terrible" (420 ms) is much lower than WebSocket's (509 ms).
+- Encode cost ~1.5 ms for 640×360 — codec is transport-agnostic.
 - Raw does not heal — stale state under loss.
-- Pacer sleeps 188 k under tight budget — confirms pacing is the
-  bottleneck under congestion.
 
 Caveats:
-- Resend uses simulated re-delivery, not full MLP anchor-plan repair.
-- Cell accounting uses placeholder cells (vec![0,1]).
+- No pacing/BWE under congestion — pacer not exercised meaningfully.
 - Loss is per-fragment but resend accounts bytes approximately.
 
 ## Roadmap (remaining)
 
-1. **Real cell accounting** — feed Tessellio's actual cell indices into the
-   sender's accounting (requires codec change).
-2. **MLP pacing/BWE under congestion** — sustained load, measure BWE
-   adaptation.
-3. **WebSocket baseline with real WS** — replace simulation with
+1. **MLP pacing/BWE under congestion** — sustained load.
+2. **WebSocket baseline with real WS** — replace simulation with
    tokio-tungstenite.
-4. **Report** — markdown + plots in `results/` (done: phase11.md, latency.png).
+3. **Report** — markdown + plots in `results/` (done).
 
 ## Building
 

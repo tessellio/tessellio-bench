@@ -8,7 +8,7 @@ license = "PolyForm-Noncommercial-1.0.0"
 publish = false
 
 [dependencies]
-tessellio-core = { git = "https://github.com/tessellio/tessellio-core", rev = "5d06cfac46c83ca46644a5fa0ba69c06b1af0c23" }
+tessellio-core = { git = "https://github.com/tessellio/tessellio-core", rev = "decd48f281c4a7b3eba59fc62bf21b3f3c1bdbc7" }
 mlp-core = { git = "https://github.com/medialaneprotocol/mlp-core", rev = "7b78d63c045a21bcbebf792d45d9e10fe32204e8" }
 rand = "0.8"
 

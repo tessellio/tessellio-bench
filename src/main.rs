@@ -61,6 +61,7 @@ fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f
     };
     let update = encoder.commit(planned, 1);
     let encode_ms = t0.elapsed().as_secs_f64() * 1000.0;
+    let cells = update.changed_cell_indices.clone();
     let tess_bytes = update.payload_bytes();
 
     let t_start = Instant::now();
@@ -76,7 +77,7 @@ fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f
             let mut receiver = MediaReceiverMachine::new(MediaReceiverConfig::for_carrier(Carrier::DataChannel), now);
 
             // First attempt: enqueue + poll all fragments.
-            let _ = sender.enqueue_update(UpdateRequest::delta(vec![0u8; tess_bytes], vec![0, 1]), Instant::now());
+            let _ = sender.enqueue_update(UpdateRequest::delta(vec![0u8; tess_bytes], cells.clone()), Instant::now());
             let mut all_frags: Vec<Vec<u8>> = Vec::new();
             while let Some(f) = sender.poll_fragment(Instant::now()) {
                 all_frags.push(f.bytes);
@@ -234,6 +235,7 @@ fn run_throughput(link: Link, rng: &mut impl Rng) -> (u64, f64, u32) {
         };
         let update = encoder.commit(planned, i + 1);
         let tess_bytes = update.payload_bytes();
+        let cells = update.changed_cell_indices.clone();
 
         // Wait until in_flight has room.
         while sender.in_flight() >= 2 {
@@ -253,7 +255,7 @@ fn run_throughput(link: Link, rng: &mut impl Rng) -> (u64, f64, u32) {
                 // nothing more to do this round
             }
         }
-        let _ = sender.enqueue_update(UpdateRequest::delta(vec![0u8; tess_bytes], vec![0, 1]), Instant::now());
+        let _ = sender.enqueue_update(UpdateRequest::delta(vec![0u8; tess_bytes], cells.clone()), Instant::now());
         // poll immediately
         while let Some(f) = sender.poll_fragment(Instant::now()) {
             pending_frags.push(f.bytes);
