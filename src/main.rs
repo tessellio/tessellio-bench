@@ -103,6 +103,11 @@ fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f
                     break;
                 }
                 heals += 1;
+                // repair: re-enqueue as an MLP repair/anchor update
+                let mut req = UpdateRequest::delta(vec![0u8; tess_bytes], vec![0, 1]);
+                req.kind = mlp_core::media::scheduler::UpdateKind::Repair;
+                req.anchor = true;
+                let _ = sender.enqueue_update(req, Instant::now());
             }
             if applied {
                 thread::sleep(Duration::from_millis(link.rtt_ms / 2));

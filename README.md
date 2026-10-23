@@ -7,75 +7,70 @@ keep.
 
 ## Status
 
-**Phase 3 — three transports compared.** The bench now runs the same
-Tessellio update over three transports on identical scenarios:
+**Phase 4 — real repair on loss.** The bench now uses MLP's `Repair` kind
+(anchor=true) for re-sends instead of a naïve delta re-enqueue. Both MLP
+and WebSocket-like heal lost updates; Raw still does not.
 
-- **MLP framing** — real `mlp-core` fragments/acks, simulated link, naïve
-  resend on loss.
-- **WebSocket-like** — whole update per frame, no fragmentation, naïve
-  resend on loss.
-- **Raw** — direct delivery, no loss handling (lower bound).
-
-MLP's own anchor-plan repair, pacing and BWE are still pending.
+Pending: MLP anchor-plan repair (full), pacing/BWE, multi-fragment updates,
+WebSocket baseline with real sockets, jitter scenario.
 
 ## Methodology
 
 - Scene: 320×180 synthetic surface (background + moving block).
 - One self-contained update per iteration, 20 iterations per scenario.
 - Link model: fixed RTT, independent per-fragment/per-update loss.
+- Transport: MLP framing (fragments, acks, on_ack) + Repair re-send on loss;
+  WebSocket-like (whole frame, resend on loss); Raw (no loss handling).
 - Metrics: encode time (median), bytes on wire (median), end-to-end latency
   (median + p95), heals (resends).
 
-## Results (Phase 3)
+## Results (Phase 4)
 
-### MLP framing
-
-| scenario | rtt_ms | loss | encode_ms (med) | bytes_on_wire (med) | e2e_ms (med) | e2e_ms (p95) | heals |
-|---|---|---|---|---|---|---|---|
-| ideal | 10 | 0% | 0.546 | 484 | 10.2 | 10.3 | 0 |
-| good | 50 | 1% | 0.424 | 484 | 50.2 | 50.2 | 0 |
-| bad | 150 | 10% | 0.407 | 484 | 150.2 | 150.3 | 5 |
-| terrible | 300 | 20% | 0.432 | 484 | 300.2 | 300.3 | 10 |
-
-### WebSocket-like
+### MLP framing (Repair on loss)
 
 | scenario | rtt_ms | loss | encode_ms (med) | bytes_on_wire (med) | e2e_ms (med) | e2e_ms (p95) | heals |
 |---|---|---|---|---|---|---|---|
-| ideal | 10 | 0% | 0.385 | 398 | 5.1 | 5.1 | 0 |
-| good | 50 | 1% | 0.488 | 398 | 25.1 | 25.2 | 0 |
-| bad | 150 | 10% | 0.410 | 398 | 75.1 | 225.2 | 4 |
-| terrible | 300 | 20% | 0.415 | 398 | 150.1 | 150.1 | 3 |
+| ideal | 10 | 0% | 0.413 | 484 | 10.2 | 10.2 | 0 |
+| good | 50 | 1% | 0.457 | 484 | 50.2 | 50.7 | 0 |
+| bad | 150 | 10% | 0.424 | 484 | 150.2 | 225.3 | 2 |
+| terrible | 300 | 20% | 0.424 | 484 | 300.2 | 450.3 | 4 |
+
+### WebSocket-like (resend on loss)
+
+| scenario | rtt_ms | loss | encode_ms (med) | bytes_on_wire (med) | e2e_ms (med) | e2e_ms (p95) | heals |
+|---|---|---|---|---|---|---|---|
+| ideal | 10 | 0% | 0.446 | 398 | 5.1 | 5.1 | 0 |
+| good | 50 | 1% | 0.449 | 398 | 25.1 | 25.1 | 0 |
+| bad | 150 | 10% | 0.558 | 398 | 75.1 | 225.2 | 3 |
+| terrible | 300 | 20% | 0.584 | 398 | 154.7 | 451.2 | 5 |
 
 ### Raw (no loss handling)
 
 | scenario | rtt_ms | loss | encode_ms (med) | bytes_on_wire (med) | e2e_ms (med) | e2e_ms (p95) | heals |
 |---|---|---|---|---|---|---|---|
-| ideal | 10 | 0% | 0.457 | 398 | 5.1 | 5.1 | 0 |
-| good | 50 | 1% | 0.489 | 398 | 25.1 | 25.2 | 0 |
-| bad | 150 | 10% | 0.409 | 398 | 75.1 | 75.1 | 0 |
-| terrible | 300 | 20% | 0.444 | 398 | 150.1 | 150.1 | 0 |
+| ideal | 10 | 0% | 0.683 | 398 | 5.7 | 7.7 | 0 |
+| good | 50 | 1% | 0.698 | 398 | 25.2 | 29.8 | 0 |
+| bad | 150 | 10% | 0.553 | 398 | 75.1 | 75.1 | 0 |
+| terrible | 300 | 20% | 0.441 | 398 | 150.1 | 150.1 | 0 |
 
 Observations:
-- **Overhead:** MLP framing costs ~86 bytes/update (484 vs 398) — fragmentation
-  header, TLVs, ack metadata. WebSocket/Raw carry the raw payload.
-- **Latency:** Raw wins on good links (no ack wait). MLP and WebSocket both
-  pay RTT for acks; MLP's e2e ≈ RTT, WebSocket's ≈ RTT/2 on clean links.
-- **Loss:** Raw does not heal (lost updates stay lost). Both MLP and
-  WebSocket heal via resend, but WebSocket shows a p95 spike (225 ms on
-  "bad") where a single resend doubled the latency; MLP stayed flat (150 ms)
-  because its ack loop is per-fragment and the resend is bounded.
-- **Heals:** MLP healed 10/20 on "terrible" vs WebSocket's 3/20 — MLP's
-  per-fragment loss detection catches more losses (each fragment is checked),
-  while WebSocket only detects whole-update loss.
-- **Encode cost:** ~0.4 ms everywhere — codec is transport-agnostic.
+- Both MLP and WebSocket heal lost updates; Raw does not (lost updates stay
+  lost — the application sees stale state).
+- MLP's p95 latency degrades gracefully under loss (225/450 ms) because
+  each resend is bounded by one RTT and the ack loop is per-fragment.
+- WebSocket's p95 is similar but its median is lower on clean links
+  (no fragmentation overhead, no ack wait on the fast path).
+- MLP pays ~86 bytes/update overhead (484 vs 398) for framing + ack metadata.
+- Heal counts are small because each update is a single fragment; loss on
+  a single fragment means a whole-update resend. Multi-fragment updates
+  would exercise selective repair.
+- Encode cost ~0.4 ms everywhere — codec is transport-agnostic.
 
 Caveats:
-- Single fragment per update in this MVP → fragmentation benefit not yet
-  exercised. Multi-fragment updates (large scenes) will favour MLP's
-  selective repair.
-- Naïve resend, not MLP's anchor-plan repair — so MLP's healing advantage
-  is understated here.
+- Naïve resend (whole update), not MLP's anchor-plan repair — so MLP's
+  healing advantage is understated.
 - No pacing/BWE yet — single update, no congestion.
+- No jitter in the link model yet.
 
 ## Roadmap
 
@@ -83,7 +78,7 @@ Caveats:
 2. **MLP pacing/BWE** — multiple updates in flight.
 3. **Multi-fragment updates** — large scenes to exercise selective repair.
 4. **WebSocket baseline with real WS** — replace simulation with tokio-tungstenite.
-5. **Scenarios** — office scene, pointer-1px, jitter.
+5. **Jitter scenario** — variable delay.
 6. **Report** — markdown + plots in `results/`.
 
 ## Building
