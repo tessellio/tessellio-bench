@@ -48,6 +48,7 @@ enum Transport {
 struct Link {
     rtt_ms: u64,
     loss: f64,
+    jitter_ms: u64,
 }
 
 fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f64, u32) {
@@ -88,7 +89,8 @@ fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f
                     if rng.r#gen::<f64>() < link.loss {
                         continue;
                     }
-                    thread::sleep(Duration::from_millis(link.rtt_ms / 2));
+                    let delay = link.rtt_ms / 2 + rng.r#gen::<u64>() % (link.jitter_ms + 1);
+                    thread::sleep(Duration::from_millis(delay));
                     let evs = receiver.on_message(f, Instant::now());
                     for ev in evs {
                         if let mlp_core::media::receiver::MediaReceiveEvent::Object(_) = ev {
@@ -110,7 +112,8 @@ fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f
                 let _ = sender.enqueue_update(req, Instant::now());
             }
             if applied {
-                thread::sleep(Duration::from_millis(link.rtt_ms / 2));
+                let delay = link.rtt_ms / 2 + rng.r#gen::<u64>() % (link.jitter_ms + 1);
+                thread::sleep(Duration::from_millis(delay));
                 let ack = receiver.build_ack(Instant::now());
                 let _ = sender.on_ack(ack, Instant::now());
             }
@@ -121,10 +124,12 @@ fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f
                 bytes_on_wire += tess_bytes as u64; // one frame
                 if rng.r#gen::<f64>() < link.loss {
                     heals += 1;
-                    thread::sleep(Duration::from_millis(link.rtt_ms));
+                    let delay = link.rtt_ms + rng.r#gen::<u64>() % (link.jitter_ms + 1);
+                    thread::sleep(Duration::from_millis(delay));
                     continue;
                 }
-                thread::sleep(Duration::from_millis(link.rtt_ms / 2));
+                let delay = link.rtt_ms / 2 + rng.r#gen::<u64>() % (link.jitter_ms + 1);
+                thread::sleep(Duration::from_millis(delay));
                 applied = true;
                 break;
             }
@@ -132,7 +137,8 @@ fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f
         Transport::Raw => {
             // Raw: direct delivery, no overhead, no loss handling
             bytes_on_wire += tess_bytes as u64;
-            thread::sleep(Duration::from_millis(link.rtt_ms / 2));
+            let delay = link.rtt_ms / 2 + rng.r#gen::<u64>() % (link.jitter_ms + 1);
+            thread::sleep(Duration::from_millis(delay));
             applied = true;
         }
     }
@@ -172,10 +178,11 @@ fn p95(v: &[f64]) -> f64 {
 fn main() {
     let mut rng = rand::thread_rng();
     let scenarios = [
-        ("ideal", Link { rtt_ms: 10, loss: 0.0 }),
-        ("good", Link { rtt_ms: 50, loss: 0.01 }),
-        ("bad", Link { rtt_ms: 150, loss: 0.10 }),
-        ("terrible", Link { rtt_ms: 300, loss: 0.20 }),
+        ("ideal", Link { rtt_ms: 10, loss: 0.0, jitter_ms: 0 }),
+        ("good", Link { rtt_ms: 50, loss: 0.01, jitter_ms: 5 }),
+        ("bad", Link { rtt_ms: 150, loss: 0.10, jitter_ms: 30 }),
+        ("terrible", Link { rtt_ms: 300, loss: 0.20, jitter_ms: 80 }),
+        ("jitter", Link { rtt_ms: 100, loss: 0.05, jitter_ms: 60 }),
     ];
     let transports = [Transport::Mlp, Transport::Ws, Transport::Raw];
 
