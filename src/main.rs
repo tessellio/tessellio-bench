@@ -432,6 +432,14 @@ fn main() {
     println!("| metric | value |");
     println!("|---|---|");
     println!("| RTT (398 bytes) | {:.3} ms |", ws);
+    // Real WS under loss (netem)
+    let ws_loss = rt.block_on(ws_rtt_netem(10, 50));
+    println!();
+    println!("# Real WebSocket under netem (10% loss, 50ms delay)");
+    println!();
+    println!("| metric | value |");
+    println!("|---|---|");
+    println!("| median RTT (398 bytes) | {:.3} ms |", ws_loss);
 }
 
 // Real WebSocket round-trip (informational): localhost echo server.
@@ -465,4 +473,53 @@ async fn ws_rtt() -> f64 {
         .unwrap();
     if let Some(Ok(_)) = ws.next().await {}
     t0.elapsed().as_secs_f64() * 1000.0
+}
+
+async fn ws_rtt_netem(loss_pct: u32, delay_ms: u32) -> f64 {
+    use futures_util::{SinkExt, StreamExt};
+    use tokio::net::TcpListener;
+    use tokio_tungstenite::accept_async;
+
+    // apply netem
+    let _ = std::process::Command::new("sudo")
+        .args(["tc", "qdisc", "add", "dev", "lo", "root", "netem",
+               "loss", &format!("{}%", loss_pct),
+               "delay", &format!("{}ms", delay_ms)])
+        .status();
+
+    let listener = TcpListener::bind("127.0.0.1:9002").await.unwrap();
+    tokio::spawn(async move {
+        if let Ok((stream, _)) = listener.accept().await {
+            if let Ok(mut ws) = accept_async(stream).await {
+                while let Some(Ok(msg)) = ws.next().await {
+                    if ws.send(msg).await.is_err() { break; }
+                }
+            }
+        }
+    });
+
+    // try a few times (loss may drop)
+    let mut rtts = Vec::new();
+    for _ in 0..5 {
+        if let Ok((mut ws, _)) = tokio_tungstenite::connect_async("ws://127.0.0.1:9002").await {
+            let payload = vec![0u8; 398];
+            let t0 = Instant::now();
+            if ws.send(tokio_tungstenite::tungstenite::Message::Binary(payload.into())).await.is_ok() {
+                if let Some(Ok(_)) = ws.next().await {
+                    rtts.push(t0.elapsed().as_secs_f64() * 1000.0);
+                }
+            }
+        }
+    }
+
+    // reset netem
+    let _ = std::process::Command::new("sudo")
+        .args(["tc", "qdisc", "del", "dev", "lo", "root"])
+        .status();
+
+    if rtts.is_empty() { f64::NAN } else {
+        let mut s = rtts.clone();
+        s.sort_by(|a,b| a.partial_cmp(b).unwrap());
+        s[s.len()/2]
+    }
 }

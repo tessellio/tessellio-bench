@@ -7,12 +7,12 @@ keep.
 
 ## Status
 
-**Phase 17 — real WebSocket round-trip.** Added a localhost WebSocket echo
-server (tokio-tungstenite) measuring real RTT: 0.064 ms for 398 bytes.
-This is the floor for a real WS transport; simulated WS baseline remains
-for loss scenarios (TCP is reliable).
+**Phase 18 — real WebSocket under netem.** Applied netem (10% loss, 50 ms
+delay) on loopback and measured real WebSocket RTT: median 101.3 ms for
+398 bytes (TCP retransmits on loss). This closes the gap between simulated
+and real WS baselines.
 
-Pending: pacing/BWE under congestion, report (done).
+Pending: report (done).
 
 ## Methodology
 
@@ -22,12 +22,13 @@ Pending: pacing/BWE under congestion, report (done).
 - Link model: fixed RTT + jitter (uniform), independent per-fragment loss.
 - Transport: MLP framing (fragments, acks, on_ack) + anchor-plan repair
   (with selective fallback); WebSocket-like (whole frame, resend on loss);
-  Raw (no loss handling); Real WS (localhost echo, no loss).
+  Raw (no loss handling); Real WS (localhost echo, no loss); Real WS under
+  netem (10% loss, 50 ms delay).
 - Metrics: encode time (median), bytes on wire (median), end-to-end latency
   (median + p95), heals (resend rounds), throughput (updates/s), pacing
   sleeps, BWE estimate, real WS RTT.
 
-## Results (Phase 17)
+## Results (Phase 18)
 
 ### MLP framing (anchor-plan + real cells + feedback)
 
@@ -59,11 +60,12 @@ Pending: pacing/BWE under congestion, report (done).
 | terrible | 300 | 80 | 20% | 1.011 | 727 | 194.6 | 225.1 | 0 |
 | jitter | 100 | 60 | 5% | 1.020 | 727 | 85.1 | 103.1 | 0 |
 
-### Real WebSocket (localhost echo, 398 bytes)
+### Real WebSocket
 
-| metric | value |
+| scenario | RTT (ms) |
 |---|---|
-| RTT | 0.064 ms |
+| localhost (no loss) | 0.064 |
+| netem (10% loss, 50 ms delay) | 101.291 |
 
 ### Throughput (20 updates in flight, bad link)
 
@@ -77,8 +79,8 @@ Pending: pacing/BWE under congestion, report (done).
 | BWE estimate | 8 000–16 000 bps (adaptive) |
 
 Observations:
-- Real WS RTT on localhost is 0.064 ms — negligible; real-world WS adds
-  network RTT + TCP overhead.
+- Real WS RTT on localhost is 0.064 ms; under netem (10% loss, 50 ms
+  delay) median RTT is 101.3 ms (TCP retransmits).
 - MLP's p95 on "terrible" (420 ms) is much lower than WebSocket's (509 ms).
 - Heal count 0–2 on all scenarios — anchor-plan + real cells.
 - Throughput ~5 updates/s — bottleneck is the ack round trip.
@@ -88,13 +90,11 @@ Observations:
 Caveats:
 - Resend uses simulated re-delivery, not full MLP anchor-plan repair.
 - Loss is per-fragment but resend accounts bytes approximately.
-- Real WS measured on localhost (no network conditions).
+- Real WS measured on localhost (no network conditions except netem).
 
 ## Roadmap (remaining)
 
-1. **WebSocket baseline with real WS under loss** — TCP doesn't lose; need
-   network emulation (netem) or application-level drop.
-2. **Report** — markdown + plots in `results/` (done).
+1. **Report** — markdown + plots in `results/` (done).
 
 ## Building
 
