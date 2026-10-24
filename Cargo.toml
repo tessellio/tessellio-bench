@@ -12,7 +12,7 @@ categories = ["development-tools"]
 
 [dependencies]
 tessellio-core = { git = "https://github.com/tessellio/tessellio-core", rev = "0f2f9f0"   }
-mlp-core = { git = "https://github.com/medialaneprotocol/mlp-core", rev = "b35cade1fab61297ab69454fe3b3cd91ba432ca3" }
+mlp-core = { git = "https://github.com/medialaneprotocol/mlp-core", rev = "365265a23bb0e39aa7fa52c6350345690df322a3" }
 rand = "0.8"
 futures-util = "0.3"
 tokio = { version = "1", features = ["full"] }
