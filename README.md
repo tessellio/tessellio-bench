@@ -137,3 +137,12 @@ cargo run --release
 ## License
 
 PolyForm Noncommercial 1.0.0 — see the Tessellio reference implementations.
+## Reproducing
+
+```sh
+bash scripts/run_bench.sh
+```
+
+This runs the benchmark, regenerates `results/data.json`, all plots, and
+`results/phase11.md` automatically. Plots are generated from `data.json`
+(no hardcoded numbers), so they always reflect the latest run.
