@@ -7,6 +7,8 @@ description = "Benchmarks: Tessellio screen codec over different transports."
 license = "PolyForm-Noncommercial-1.0.0"
 documentation = "https://github.com/tessellio/tessellio-bench"
 publish = false
+keywords = ["benchmark", "codec", "transport"]
+categories = ["development-tools"]
 
 [dependencies]
 tessellio-core = { git = "https://github.com/tessellio/tessellio-core", rev = "decd48f281c4a7b3eba59fc62bf21b3f3c1bdbc7" }
