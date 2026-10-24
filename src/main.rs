@@ -34,14 +34,14 @@ struct Link {
     jitter_ms: u64,
 }
 
-fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f64, u32) {
+fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f64, f64, u32) {
     let mut encoder = ScreenStreamEncoder::new(CodecConfig::default());
     let capture = paint(1);
     let t0 = Instant::now();
     let planned = match encoder.encode(&capture) {
         Ok(Some(p)) => p,
-        Ok(None) => return (0.0, 0, 0.0, 0),
-        Err(_) => return (0.0, 0, 0.0, 0),
+        Ok(None) => return (0.0, 0, 0.0, 0.0, 0),
+        Err(_) => return (0.0, 0, 0.0, 0.0, 0),
     };
     let update = encoder.commit(planned, 1);
     let encode_ms = t0.elapsed().as_secs_f64() * 1000.0;
@@ -49,8 +49,8 @@ fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f
     let tess_bytes = update.payload_bytes();
 
     let t_start = Instant::now();
+    let mut first_delivery: Option<Instant> = None;
     let mut heals = 0u32;
-    let mut applied = false;
     let mut bytes_on_wire: u64 = 0;
 
     match transport {
@@ -104,6 +104,9 @@ fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f
                 for ev in evs {
                     if let mlp_core::media::receiver::MediaReceiveEvent::Object(_) = ev {
                         receiver.note_applied(1);
+                        if !got_object {
+                            first_delivery = Some(Instant::now());
+                        }
                         got_object = true;
                     }
                 }
@@ -146,6 +149,9 @@ fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f
                     for ev in evs {
                         if let mlp_core::media::receiver::MediaReceiveEvent::Object(_) = ev {
                             receiver.note_applied(1);
+                            if !got_object {
+                                first_delivery = Some(Instant::now());
+                            }
                             got_object = true;
                         }
                     }
@@ -158,7 +164,9 @@ fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f
             }
 
             if got_object {
-                applied = true;
+                if first_delivery.is_none() {
+                    first_delivery = Some(Instant::now());
+                }
                 let delay = link.rtt_ms / 2 + rng.r#gen::<u64>() % (link.jitter_ms + 1);
                 thread::sleep(Duration::from_millis(delay));
                 let ack = receiver.build_ack(Instant::now());
@@ -214,8 +222,10 @@ fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f
                 for ev in evs {
                     if let mlp_core::media::receiver::MediaReceiveEvent::Object(_) = ev {
                         receiver.note_applied(1);
-                        applied = true;
-                    }
+                        if first_delivery.is_none() {
+                            first_delivery = Some(Instant::now());
+                        }
+                            }
                 }
             }
         }
@@ -231,7 +241,9 @@ fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f
                 }
                 let delay = link.rtt_ms / 2 + rng.r#gen::<u64>() % (link.jitter_ms + 1);
                 thread::sleep(Duration::from_millis(delay));
-                applied = true;
+                if first_delivery.is_none() {
+                    first_delivery = Some(Instant::now());
+                }
                 break;
             }
         }
@@ -240,16 +252,17 @@ fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f
             bytes_on_wire += tess_bytes as u64;
             let delay = link.rtt_ms / 2 + rng.r#gen::<u64>() % (link.jitter_ms + 1);
             thread::sleep(Duration::from_millis(delay));
-            applied = true;
+            if first_delivery.is_none() {
+                first_delivery = Some(Instant::now());
+            }
         }
     }
 
-    let e2e_ms = if applied {
-        t_start.elapsed().as_secs_f64() * 1000.0
-    } else {
-        t_start.elapsed().as_secs_f64() * 1000.0
-    };
-    (encode_ms, bytes_on_wire, e2e_ms, heals)
+    let first_delivery_ms = first_delivery
+        .map(|t| t.duration_since(t_start).as_secs_f64() * 1000.0)
+        .unwrap_or_else(|| t_start.elapsed().as_secs_f64() * 1000.0);
+    let full_cycle_ms = t_start.elapsed().as_secs_f64() * 1000.0;
+    (encode_ms, bytes_on_wire, first_delivery_ms, full_cycle_ms, heals)
 }
 
 /// Throughput: 5 updates in flight, measure total bytes and time.
@@ -414,23 +427,25 @@ fn main() {
             Transport::Raw => "Raw (no loss handling)",
         };
         println!("\n# {} \n", label);
-        println!("| scenario | rtt_ms | loss | encode_ms (med) | bytes_on_wire (med) | e2e_ms (med) | e2e_ms (p95) | heals |");
-        println!("|---|---|---|---|---|---|---|---|");
+        println!("| scenario | rtt_ms | loss | encode_ms (med) | bytes_on_wire (med) | e2e_ms (med) | e2e_ms (p95) | full_cycle (med) | heals |");
+        println!("|---|---|---|---|---|---|---|---|---|");
         for (name, link) in scenarios {
             let mut encodes = Vec::new();
             let mut bytes = Vec::new();
             let mut e2es = Vec::new();
+            let mut fulls = Vec::new();
             let mut heals_total = 0u32;
             for _ in 0..ITERS {
-                let (em, bs, e2e, h) = run_one(tr, link, &mut rng);
+                let (em, bs, e2e, full, h) = run_one(tr, link, &mut rng);
                 encodes.push(em);
                 bytes.push(bs as f64);
                 e2es.push(e2e);
+                fulls.push(full);
                 heals_total += h;
             }
             // recompute applied count properly
             println!(
-                "| {} | {} | {:.0}% | {:.3} | {:.0} | {:.1} | {:.1} | {} |",
+                "| {} | {} | {:.0}% | {:.3} | {:.0} | {:.1} | {:.1} | {:.1} | {} |",
                 name,
                 link.rtt_ms,
                 link.loss * 100.0,
@@ -438,6 +453,7 @@ fn main() {
                 median(&bytes),
                 median(&e2es),
                 p95(&e2es),
+                median(&fulls),
                 heals_total
             );
         }
