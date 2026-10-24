@@ -243,7 +243,7 @@ dependencies = [
 [[package]]
 name = "mlp-core"
 version = "0.1.0"
-source = "git+https://github.com/medialaneprotocol/mlp-core?rev=6da800d399da63be7fc661c99a89e5a157277226#6da800d399da63be7fc661c99a89e5a157277226"
+source = "git+https://github.com/medialaneprotocol/mlp-core?rev=3fa2873e98ec7f0c85474430240cfc3f933eaa8b#3fa2873e98ec7f0c85474430240cfc3f933eaa8b"
 dependencies = [
  "serde",
  "serde_json",
