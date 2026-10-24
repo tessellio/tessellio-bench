@@ -5,6 +5,7 @@ edition = "2024"
 rust-version = "1.88"
 description = "Benchmarks: Tessellio screen codec over different transports."
 license = "PolyForm-Noncommercial-1.0.0"
+documentation = "https://github.com/tessellio/tessellio-bench"
 publish = false
 
 [dependencies]
