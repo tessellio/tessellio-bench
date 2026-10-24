@@ -479,7 +479,7 @@ dependencies = [
 [[package]]
 name = "tessellio-core"
 version = "0.1.0"
-source = "git+https://github.com/tessellio/tessellio-core?rev=514dad8#514dad82844d340c98d04047259f53a4d739eb37"
+source = "git+https://github.com/tessellio/tessellio-core?rev=0f2f9f0#0f2f9f040da88f7510cb7bf2825313c39f4f927c"
 dependencies = [
  "flate2",
  "serde_json",
