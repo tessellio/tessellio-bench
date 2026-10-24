@@ -9,56 +9,48 @@ full_cycle (med) reported separately (ack + feedback window, MLP only meaningful
 
 | scenario | rtt_ms | loss | encode_ms (med) | bytes_on_wire (med) | e2e_ms (med) | e2e_ms (p95) | full_cycle (med) | heals |
 |---|---|---|---|---|---|---|---|---|
-| ideal | 10 | 0% | 27.084 | 1559 | 15.4 | 15.5 | 270.6 | 0 |
-| good | 50 | 1% | 27.179 | 1559 | 38.0 | 39.4 | 314.8 | 0 |
-| bad | 150 | 10% | 26.774 | 1559 | 99.5 | 110.4 | 439.2 | 3 |
-| terrible | 300 | 20% | 27.399 | 1559 | 197.9 | 235.4 | 647.3 | 3 |
-| jitter | 100 | 5% | 26.832 | 1559 | 91.4 | 116.5 | 424.6 | 1 |
+| ideal | 10 | 0% | 27.064 | 1559 | 15.4 | 15.5 | 270.6 | 0 |
+| good | 50 | 1% | 27.795 | 1559 | 38.3 | 40.5 | 315.1 | 0 |
+| bad | 150 | 10% | 32.571 | 1559 | 101.1 | 111.4 | 440.9 | 1 |
+| terrible | 300 | 20% | 39.663 | 1559 | 181.0 | 234.6 | 641.3 | 4 |
+| jitter | 100 | 5% | 26.674 | 1559 | 96.5 | 117.4 | 415.2 | 1 |
 
 # MLP fast (no ack wait) 
 
 | scenario | rtt_ms | loss | encode_ms (med) | bytes_on_wire (med) | e2e_ms (med) | e2e_ms (p95) | full_cycle (med) | heals |
 |---|---|---|---|---|---|---|---|---|
-| ideal | 10 | 0% | 26.577 | 1559 | 15.4 | 15.5 | 15.4 | 0 |
-| good | 50 | 1% | 28.111 | 1559 | 37.4 | 40.4 | 37.4 | 0 |
-| bad | 150 | 10% | 28.506 | 1559 | 98.9 | 113.4 | 99.0 | 0 |
-| terrible | 300 | 20% | 26.841 | 1559 | 195.9 | 231.4 | 195.9 | 0 |
-| jitter | 100 | 5% | 29.095 | 1559 | 98.4 | 119.4 | 98.4 | 0 |
+| ideal | 10 | 0% | 26.906 | 1559 | 15.4 | 15.5 | 15.4 | 0 |
+| good | 50 | 1% | 26.681 | 1559 | 37.4 | 40.4 | 37.5 | 0 |
+| bad | 150 | 10% | 27.876 | 1559 | 96.4 | 107.4 | 96.4 | 0 |
+| terrible | 300 | 20% | 29.197 | 1559 | 185.9 | 218.5 | 185.9 | 0 |
+| jitter | 100 | 5% | 28.675 | 1559 | 93.5 | 117.4 | 93.5 | 0 |
 
 # WebSocket-like 
 
 | scenario | rtt_ms | loss | encode_ms (med) | bytes_on_wire (med) | e2e_ms (med) | e2e_ms (p95) | full_cycle (med) | heals |
 |---|---|---|---|---|---|---|---|---|
-| ideal | 10 | 0% | 27.275 | 1473 | 5.1 | 5.1 | 5.1 | 0 |
-| good | 50 | 1% | 27.421 | 1473 | 27.6 | 30.1 | 27.6 | 0 |
-| bad | 150 | 10% | 27.262 | 1473 | 98.1 | 263.2 | 98.1 | 5 |
-| terrible | 300 | 20% | 26.709 | 1473 | 190.6 | 556.2 | 190.6 | 8 |
-| jitter | 100 | 5% | 27.438 | 1473 | 80.1 | 196.1 | 80.1 | 2 |
+| ideal | 10 | 0% | 27.952 | 1473 | 5.1 | 5.1 | 5.1 | 0 |
+| good | 50 | 1% | 27.884 | 1473 | 27.6 | 30.3 | 27.6 | 1 |
+| bad | 150 | 10% | 26.937 | 1473 | 91.6 | 249.2 | 91.6 | 2 |
+| terrible | 300 | 20% | 27.372 | 1473 | 219.1 | 573.2 | 219.1 | 7 |
+| jitter | 100 | 5% | 26.890 | 1473 | 91.1 | 109.1 | 91.1 | 1 |
 
 # Raw (no loss handling) 
 
 | scenario | rtt_ms | loss | encode_ms (med) | bytes_on_wire (med) | e2e_ms (med) | e2e_ms (p95) | full_cycle (med) | heals |
 |---|---|---|---|---|---|---|---|---|
-| ideal | 10 | 0% | 26.571 | 1473 | 5.1 | 5.1 | 5.1 | 0 |
-| good | 50 | 1% | 26.644 | 1473 | 27.6 | 30.1 | 27.6 | 0 |
-| bad | 150 | 10% | 27.677 | 1473 | 88.1 | 105.1 | 88.1 | 0 |
-| terrible | 300 | 20% | 27.628 | 1473 | 173.6 | 220.1 | 173.6 | 0 |
-| jitter | 100 | 5% | 26.437 | 1473 | 68.6 | 97.1 | 68.6 | 0 |
+| ideal | 10 | 0% | 27.188 | 1473 | 5.1 | 5.1 | 5.1 | 0 |
+| good | 50 | 1% | 27.155 | 1473 | 27.1 | 29.1 | 27.1 | 0 |
+| bad | 150 | 10% | 27.591 | 1473 | 94.6 | 102.1 | 94.6 | 0 |
+| terrible | 300 | 20% | 26.827 | 1473 | 182.1 | 225.1 | 182.1 | 0 |
+| jitter | 100 | 5% | 26.940 | 1473 | 69.6 | 107.1 | 69.6 | 0 |
 
 # Throughput (20 updates in flight, bad link)
 
 | metric | value |
 |---|---|
-| total bytes on wire | 132785 |
-| total time (ms) | 8804.5 |
-| heals (resend rounds) | 7 |
-| throughput (updates/s) | 5.7 |
+| total bytes on wire | 133025 |
+| total time (ms) | 8391.9 |
+| heals (resend rounds) | 9 |
+| throughput (updates/s) | 6.0 |
 
-## Key findings
-
-1. MLP framing adds ~86 bytes/update overhead (1559 vs 1473).
-2. With fair measurement (time to first delivery), MLP median e2e is comparable to WebSocket (~100 vs ~90 ms on bad link).
-3. MLP p95 stays bounded under loss (110-235 ms) vs WebSocket spikes (102-556 ms) — selective fragment repair.
-4. MLP full_cycle (425-647 ms) reflects the complete protocol round trip (ack + feedback + repair), reported separately.
-5. Encode cost ~27 ms for a delta update (transport-independent; codec).
-6. Raw transport is the latency floor but does not heal.

@@ -36,14 +36,19 @@ struct Link {
 
 fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f64, f64, u32) {
     let mut encoder = ScreenStreamEncoder::new(CodecConfig::default());
-    let capture = paint(1);
+    // Commit a base frame first (phase 1) so the measured frame is a delta.
+    let base = paint(1);
+    if let Ok(Some(p)) = encoder.encode(&base) {
+        let _ = encoder.commit(p, 1);
+    }
+    let capture = paint(2);
     let t0 = Instant::now();
     let planned = match encoder.encode(&capture) {
         Ok(Some(p)) => p,
         Ok(None) => return (0.0, 0, 0.0, 0.0, 0),
         Err(_) => return (0.0, 0, 0.0, 0.0, 0),
     };
-    let update = encoder.commit(planned, 1);
+    let update = encoder.commit(planned, 2);
     let encode_ms = t0.elapsed().as_secs_f64() * 1000.0;
     let cells = update.changed_cell_indices.clone();
     let tess_bytes = update.payload_bytes();

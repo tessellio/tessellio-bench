@@ -1,0 +1,219 @@
+{
+  "scenarios": [
+    "ideal",
+    "good",
+    "bad",
+    "terrible",
+    "jitter"
+  ],
+  "transports": {
+    "MLP framing": {
+      "ideal": {
+        "rtt_ms": 10,
+        "loss_pct": 0.0,
+        "encode_ms": 27.064,
+        "bytes": 1559,
+        "e2e_med": 15.4,
+        "e2e_p95": 15.5,
+        "full_cycle": 270.6,
+        "heals": 0
+      },
+      "good": {
+        "rtt_ms": 50,
+        "loss_pct": 1.0,
+        "encode_ms": 27.795,
+        "bytes": 1559,
+        "e2e_med": 38.3,
+        "e2e_p95": 40.5,
+        "full_cycle": 315.1,
+        "heals": 0
+      },
+      "bad": {
+        "rtt_ms": 150,
+        "loss_pct": 10.0,
+        "encode_ms": 32.571,
+        "bytes": 1559,
+        "e2e_med": 101.1,
+        "e2e_p95": 111.4,
+        "full_cycle": 440.9,
+        "heals": 1
+      },
+      "terrible": {
+        "rtt_ms": 300,
+        "loss_pct": 20.0,
+        "encode_ms": 39.663,
+        "bytes": 1559,
+        "e2e_med": 181.0,
+        "e2e_p95": 234.6,
+        "full_cycle": 641.3,
+        "heals": 4
+      },
+      "jitter": {
+        "rtt_ms": 100,
+        "loss_pct": 5.0,
+        "encode_ms": 26.674,
+        "bytes": 1559,
+        "e2e_med": 96.5,
+        "e2e_p95": 117.4,
+        "full_cycle": 415.2,
+        "heals": 1
+      }
+    },
+    "MLP fast (no ack wait)": {
+      "ideal": {
+        "rtt_ms": 10,
+        "loss_pct": 0.0,
+        "encode_ms": 26.906,
+        "bytes": 1559,
+        "e2e_med": 15.4,
+        "e2e_p95": 15.5,
+        "full_cycle": 15.4,
+        "heals": 0
+      },
+      "good": {
+        "rtt_ms": 50,
+        "loss_pct": 1.0,
+        "encode_ms": 26.681,
+        "bytes": 1559,
+        "e2e_med": 37.4,
+        "e2e_p95": 40.4,
+        "full_cycle": 37.5,
+        "heals": 0
+      },
+      "bad": {
+        "rtt_ms": 150,
+        "loss_pct": 10.0,
+        "encode_ms": 27.876,
+        "bytes": 1559,
+        "e2e_med": 96.4,
+        "e2e_p95": 107.4,
+        "full_cycle": 96.4,
+        "heals": 0
+      },
+      "terrible": {
+        "rtt_ms": 300,
+        "loss_pct": 20.0,
+        "encode_ms": 29.197,
+        "bytes": 1559,
+        "e2e_med": 185.9,
+        "e2e_p95": 218.5,
+        "full_cycle": 185.9,
+        "heals": 0
+      },
+      "jitter": {
+        "rtt_ms": 100,
+        "loss_pct": 5.0,
+        "encode_ms": 28.675,
+        "bytes": 1559,
+        "e2e_med": 93.5,
+        "e2e_p95": 117.4,
+        "full_cycle": 93.5,
+        "heals": 0
+      }
+    },
+    "WebSocket-like": {
+      "ideal": {
+        "rtt_ms": 10,
+        "loss_pct": 0.0,
+        "encode_ms": 27.952,
+        "bytes": 1473,
+        "e2e_med": 5.1,
+        "e2e_p95": 5.1,
+        "full_cycle": 5.1,
+        "heals": 0
+      },
+      "good": {
+        "rtt_ms": 50,
+        "loss_pct": 1.0,
+        "encode_ms": 27.884,
+        "bytes": 1473,
+        "e2e_med": 27.6,
+        "e2e_p95": 30.3,
+        "full_cycle": 27.6,
+        "heals": 1
+      },
+      "bad": {
+        "rtt_ms": 150,
+        "loss_pct": 10.0,
+        "encode_ms": 26.937,
+        "bytes": 1473,
+        "e2e_med": 91.6,
+        "e2e_p95": 249.2,
+        "full_cycle": 91.6,
+        "heals": 2
+      },
+      "terrible": {
+        "rtt_ms": 300,
+        "loss_pct": 20.0,
+        "encode_ms": 27.372,
+        "bytes": 1473,
+        "e2e_med": 219.1,
+        "e2e_p95": 573.2,
+        "full_cycle": 219.1,
+        "heals": 7
+      },
+      "jitter": {
+        "rtt_ms": 100,
+        "loss_pct": 5.0,
+        "encode_ms": 26.89,
+        "bytes": 1473,
+        "e2e_med": 91.1,
+        "e2e_p95": 109.1,
+        "full_cycle": 91.1,
+        "heals": 1
+      }
+    },
+    "Raw (no loss handling)": {
+      "ideal": {
+        "rtt_ms": 10,
+        "loss_pct": 0.0,
+        "encode_ms": 27.188,
+        "bytes": 1473,
+        "e2e_med": 5.1,
+        "e2e_p95": 5.1,
+        "full_cycle": 5.1,
+        "heals": 0
+      },
+      "good": {
+        "rtt_ms": 50,
+        "loss_pct": 1.0,
+        "encode_ms": 27.155,
+        "bytes": 1473,
+        "e2e_med": 27.1,
+        "e2e_p95": 29.1,
+        "full_cycle": 27.1,
+        "heals": 0
+      },
+      "bad": {
+        "rtt_ms": 150,
+        "loss_pct": 10.0,
+        "encode_ms": 27.591,
+        "bytes": 1473,
+        "e2e_med": 94.6,
+        "e2e_p95": 102.1,
+        "full_cycle": 94.6,
+        "heals": 0
+      },
+      "terrible": {
+        "rtt_ms": 300,
+        "loss_pct": 20.0,
+        "encode_ms": 26.827,
+        "bytes": 1473,
+        "e2e_med": 182.1,
+        "e2e_p95": 225.1,
+        "full_cycle": 182.1,
+        "heals": 0
+      },
+      "jitter": {
+        "rtt_ms": 100,
+        "loss_pct": 5.0,
+        "encode_ms": 26.94,
+        "bytes": 1473,
+        "e2e_med": 69.6,
+        "e2e_p95": 107.1,
+        "full_cycle": 69.6,
+        "heals": 0
+      }
+    }
+  }
+}

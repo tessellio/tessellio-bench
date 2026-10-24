@@ -1,17 +1,18 @@
-import matplotlib
+import json, matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-scenarios = ['ideal','good','bad','terrible','jitter']
-mlp = [25.2,48.0,106.9,209.0,97.1]
-ws  = [5.1,27.6,89.6,204.6,85.1]
-raw = [5.1,27.1,88.6,187.1,83.6]
-mlp_p95 = [29.7,50.9,124.8,248.7,117.7]
-ws_p95  = [5.1,30.1,102.1,544.2,179.2]
+data = json.load(open('results/data.json'))
+scenarios = data['scenarios']
+T = data['transports']
+mlp = [T['MLP framing'][s]['e2e_med'] for s in scenarios]
+ws  = [T['WebSocket-like'][s]['e2e_med'] for s in scenarios]
+raw = [T['Raw (no loss handling)'][s]['e2e_med'] for s in scenarios]
+mlp_p95 = [T['MLP framing'][s]['e2e_p95'] for s in scenarios]
+ws_p95  = [T['WebSocket-like'][s]['e2e_p95'] for s in scenarios]
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12,5))
-x = range(len(scenarios))
-w = 0.25
+x = range(len(scenarios)); w = 0.25
 ax1.bar([i-w for i in x], mlp, w, label='MLP (med)')
 ax1.bar([i for i in x], ws, w, label='WebSocket (med)')
 ax1.bar([i+w for i in x], raw, w, label='Raw (med)')
