@@ -1,7 +1,7 @@
 # Phase 11 results — Tessellio over simulated transports (fair measurement)
 
 Scene: 640×360 office surface. 20 iterations per scenario.
-Measured frame is a **delta** (phase 2 after a committed base), so encode reflects incremental update cost.
+Measured frame is a **delta** (phase 2 after a committed base).
 e2e_ms measures **time to first successful delivery** for every transport (apples-to-apples).
 full_cycle (med) reported separately (ack + feedback window, MLP only meaningful).
 
@@ -45,11 +45,20 @@ full_cycle (med) reported separately (ack + feedback window, MLP only meaningful
 | terrible | 300 | 20% | 27.628 | 1473 | 173.6 | 220.1 | 173.6 | 0 |
 | jitter | 100 | 5% | 26.437 | 1473 | 68.6 | 97.1 | 68.6 | 0 |
 
+# Throughput (20 updates in flight, bad link)
+
+| metric | value |
+|---|---|
+| total bytes on wire | 132785 |
+| total time (ms) | 8804.5 |
+| heals (resend rounds) | 7 |
+| throughput (updates/s) | 5.7 |
+
 ## Key findings
 
-1. MLP framing adds ~86 bytes/update overhead (1559 vs 1473) for fragmentation header, TLVs, ack metadata.
-2. With fair measurement (time to first delivery), MLP median e2e is comparable to WebSocket (~107 vs ~90 ms on bad link).
-3. MLP p95 stays bounded under loss (110-249 ms) vs WebSocket spikes (102-544 ms) — selective fragment repair.
-4. MLP full_cycle (425-654 ms) reflects the complete protocol round trip (ack + feedback + repair), reported separately.
+1. MLP framing adds ~86 bytes/update overhead (1559 vs 1473).
+2. With fair measurement (time to first delivery), MLP median e2e is comparable to WebSocket (~100 vs ~90 ms on bad link).
+3. MLP p95 stays bounded under loss (110-235 ms) vs WebSocket spikes (102-556 ms) — selective fragment repair.
+4. MLP full_cycle (425-647 ms) reflects the complete protocol round trip (ack + feedback + repair), reported separately.
 5. Encode cost ~27 ms for a delta update (transport-independent; codec).
 6. Raw transport is the latency floor but does not heal.
