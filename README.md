@@ -123,6 +123,10 @@ Complete. 21 phases. All transports measured on the same scene (office).
 
 Done.
 
+## Examples
+
+See `examples/` directory. Run with `cargo run --example <name>`.
+
 ## Building
 
 ```bash
