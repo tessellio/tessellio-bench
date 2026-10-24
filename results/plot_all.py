@@ -3,18 +3,18 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 scenarios = ['ideal','good','bad','terrible','jitter']
-mlp_med = [10.8,56.2,182.3,386.7,157.8]
-ws_med  = [5.1,27.1,94.6,194.1,87.3]
-raw_med = [5.1,27.1,92.1,194.6,85.1]
-mlp_p95 = [12.4,60.1,200.7,420.7,196.8]
-ws_p95  = [5.1,30.1,245.2,509.1,109.1]
-mlp_heals = [0,0,0,2,0]
-ws_heals  = [0,0,4,3,1]
+mlp_med = [25.2,48.0,106.9,209.0,97.1]
+ws_med  = [5.1,27.6,89.6,204.6,85.1]
+raw_med = [5.1,27.1,88.6,187.1,83.6]
+mlp_p95 = [29.7,50.9,124.8,248.7,117.7]
+ws_p95  = [5.1,30.1,102.1,544.2,179.2]
+mlp_heals = [0,0,3,4,0]
+ws_heals  = [0,0,1,6,2]
 raw_heals = [0,0,0,0,0]
-mlp_bytes = [813]*5
-ws_bytes  = [727]*5
-mlp_enc = [8.664,8.595,8.603,9.002,8.448]
-ws_enc  = [1.550,1.505,1.595,1.499,1.589]
+mlp_bytes = [55698]*5
+ws_bytes  = [55612]*5
+mlp_enc = [91.460,84.753,83.998,83.046,83.844]
+ws_enc  = [83.994,84.358,84.286,84.798,85.934]
 
 # 1. latency med
 fig, ax = plt.subplots(figsize=(8,4))
@@ -57,7 +57,7 @@ plt.tight_layout(); plt.savefig('results/encode.png', dpi=120)
 
 # 5. bytes
 fig, ax = plt.subplots(figsize=(6,4))
-ax.bar(['MLP','WebSocket','Raw'], [813,727,727], color=['#4c72b0','#dd8452','#55a868'])
+ax.bar(['MLP','WebSocket','Raw'], [55698,55612,55612], color=['#4c72b0','#dd8452','#55a868'])
 ax.set_ylabel('bytes (lower is better)'); ax.set_title('Bytes on wire per update')
 plt.tight_layout(); plt.savefig('results/bytes.png', dpi=120)
 
