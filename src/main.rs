@@ -19,8 +19,8 @@ fn paint(phase: u32) -> CapturedFrame {
     tessellio_core::scene::office(WIDTH, HEIGHT, phase)
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Transport {
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Transport {
     Mlp,
     MlpFast,
     Ws,
@@ -28,13 +28,13 @@ enum Transport {
 }
 
 #[derive(Clone, Copy)]
-struct Link {
-    rtt_ms: u64,
-    loss: f64,
-    jitter_ms: u64,
+pub struct Link {
+    pub rtt_ms: u64,
+    pub loss: f64,
+    pub jitter_ms: u64,
 }
 
-fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f64, f64, u32) {
+pub fn run_one(transport: Transport, link: Link, rng: &mut impl Rng) -> (f64, u64, f64, f64, u32) {
     let mut encoder = ScreenStreamEncoder::new(CodecConfig::default());
     // Commit a base frame first (phase 1) so the measured frame is a delta.
     let base = paint(1);

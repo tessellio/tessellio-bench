@@ -7,7 +7,8 @@ keep.
 
 ## Status
 
-Complete. 21 phases. All transports measured on the same scene (office).
+Complete. All transports measured on the same scene (office); the
+measured history is in `CHANGELOG.md`.
 
 ## Methodology
 
@@ -144,5 +145,5 @@ bash scripts/run_bench.sh
 ```
 
 This runs the benchmark, regenerates `results/data.json`, all plots, and
-`results/phase11.md` automatically. Plots are generated from `data.json`
+`results/` automatically. Plots are generated from `data.json`
 (no hardcoded numbers), so they always reflect the latest run.

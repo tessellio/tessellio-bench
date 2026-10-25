@@ -11,8 +11,8 @@ keywords = ["benchmark", "codec", "transport"]
 categories = ["development-tools"]
 
 [dependencies]
-tessellio-core = { git = "https://github.com/tessellio/tessellio-core", rev = "1aee025ff798c48bb2e5732a0daab8d01797dbae" }
-mlp-core = { git = "https://github.com/medialaneprotocol/mlp-core", rev = "b6d45236d57566286dd5b5493fa65741f58332a1" }
+tessellio-core = { git = "https://github.com/tessellio/tessellio-core", rev = "6c896065af68e9250bef6390b2b52d15dbb1b435" }
+mlp-core = { git = "https://github.com/medialaneprotocol/mlp-core", rev = "074cfed234d6b97a75ef91ff0e34f8623afbdcb8" }
 rand = "0.8"
 futures-util = "0.3"
 tokio = { version = "1", features = ["full"] }

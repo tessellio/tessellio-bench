@@ -276,7 +276,7 @@ dependencies = [
 [[package]]
 name = "mlp-core"
 version = "0.1.0"
-source = "git+https://github.com/medialaneprotocol/mlp-core?rev=b6d45236d57566286dd5b5493fa65741f58332a1#b6d45236d57566286dd5b5493fa65741f58332a1"
+source = "git+https://github.com/medialaneprotocol/mlp-core?rev=074cfed234d6b97a75ef91ff0e34f8623afbdcb8#074cfed234d6b97a75ef91ff0e34f8623afbdcb8"
 dependencies = [
  "serde",
  "serde_json",
@@ -512,7 +512,7 @@ dependencies = [
 [[package]]
 name = "tessellio-core"
 version = "0.1.0"
-source = "git+https://github.com/tessellio/tessellio-core?rev=1aee025ff798c48bb2e5732a0daab8d01797dbae#1aee025ff798c48bb2e5732a0daab8d01797dbae"
+source = "git+https://github.com/tessellio/tessellio-core?rev=6c896065af68e9250bef6390b2b52d15dbb1b435#6c896065af68e9250bef6390b2b52d15dbb1b435"
 dependencies = [
  "flate2",
  "miniz_oxide",
